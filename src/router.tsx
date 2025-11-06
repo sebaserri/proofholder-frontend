@@ -11,7 +11,12 @@ import {
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { Suspense, lazy, useEffect, useRef } from "react";
-import { LoadingOverlay, PageSkeleton } from "./components";
+import {
+  LoadingOverlay,
+  PageSkeleton,
+  ThemeToggle,
+  UnverifiedEmailBanner,
+} from "./components";
 import { useLogout, useSessionQuery } from "./state/session";
 
 // --- Lazy pages ---
@@ -25,9 +30,22 @@ const ResendVerificationPage = lazy(
 const ResetPasswordPage = lazy(() => import("./routes/reset-password"));
 const VerifyEmailPage = lazy(() => import("./routes/verify-email"));
 
+const LogoutRoute = lazy(() => import("./routes/logout"));
+const AdminPage = lazy(() => import("./routes/admin"));
+
+const ProfilePage = lazy(() => import("./routes/profile"));
+const VendorPage = lazy(() => import("./routes/vendor"));
+const GuardPage = lazy(() => import("./routes/guard"));
+
 export type RouterContext = {};
 
-const PROTECTED_PREFIXES = ["/dashboard"];
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/vendor",
+  "/guard",
+  "/admin",
+  "/profile",
+];
 
 // ---------------- UI bits ----------------
 function TopProgress() {
@@ -94,6 +112,10 @@ function AuthHeader() {
           {me ? (
             <>
               <NavLink to="/dashboard">Panel</NavLink>
+              {me.role === "VENDOR" && <NavLink to="/vendor">Vendor</NavLink>}
+              {me.role === "GUARD" && <NavLink to="/guard">Guard</NavLink>}
+              {me.role === "ADMIN" && <NavLink to="/admin">Admin</NavLink>}
+              <NavLink to="/profile">Perfil</NavLink>
               <button
                 className="btn btn-ghost"
                 onClick={() =>
@@ -110,9 +132,18 @@ function AuthHeader() {
             </>
           ) : (
             <>
+              <Link
+                to="/login"
+                search={next ? { next } : undefined}
+                className="link px-2 py-1 rounded-lg"
+                activeProps={{ className: "font-semibold" }}
+              >
+                Ingresar
+              </Link>
               <NavLink to="/register">Registrarme</NavLink>
             </>
           )}
+          <ThemeToggle />
         </nav>
       </div>
     </header>
@@ -134,6 +165,8 @@ function Shell() {
       <TopProgress />
       <SkipToContent />
       <AuthHeader />
+      {/* Banner de email no verificado (solo mostrará algo si hay user en cache y emailVerified === false) */}
+      <UnverifiedEmailBanner className="mt-2" />
       <main
         id="main"
         ref={mainRef}
@@ -167,6 +200,7 @@ function GuardLoading() {
   );
 }
 
+import RequireRole from "./auth/RequireRole";
 function RequireAuth({ children }: { children: ReactNode }) {
   // ✅ En rutas protegidas sí chequeamos /auth/me
   const { data: me, isLoading } = useSessionQuery({ enabled: true });
@@ -269,6 +303,58 @@ const dashboardRoute = createRoute({
   ),
 });
 
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/profile",
+  component: () => (
+    <RequireAuth>
+      <ProfilePage />
+    </RequireAuth>
+  ),
+});
+
+const vendorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/vendor",
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["VENDOR", "ADMIN"]}>
+        <VendorPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const guardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/guard",
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["GUARD", "ADMIN"]}>
+        <GuardPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin",
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <AdminPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const logoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/logout",
+  component: () => <LogoutRoute />,
+});
+
 // 404
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -300,6 +386,11 @@ const routeTree = rootRoute.addChildren([
   verifyRoute,
   resendRoute,
   dashboardRoute,
+  profileRoute,
+  adminRoute,
+  vendorRoute,
+  guardRoute,
+  logoutRoute,
   notFoundRoute,
 ]);
 

@@ -9,6 +9,7 @@ import { StrictMode, useEffect, useState, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import { router } from "./router";
+import { ToastProvider } from "./ui/toast/ToastProvider";
 
 // Centralized QueryClient with sensible prod/dev defaults & logging
 const queryClient = new QueryClient({
@@ -66,7 +67,9 @@ function ReactQueryDevtoolsGate() {
 function AppProviders() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ToastProvider>
+        <RouterProvider router={router} />
+      </ToastProvider>
       <ReactQueryDevtoolsGate />
     </QueryClientProvider>
   );

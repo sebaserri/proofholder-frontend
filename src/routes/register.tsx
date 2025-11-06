@@ -10,6 +10,7 @@ import {
   TextField,
 } from "../components";
 import { Role, SessionUser, useRegister } from "../state/session";
+import { useToast } from "../ui/toast/ToastProvider";
 
 const MailIcon = (
   <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
@@ -45,6 +46,8 @@ export default function RegisterPage() {
   const qc = useQueryClient();
   const cachedMe = qc.getQueryData<SessionUser | null>(["me"]);
   const nav = useNavigate();
+
+  const { show } = useToast();
 
   useEffect(() => {
     if (cachedMe) nav({ to: "/dashboard", replace: true });
@@ -104,7 +107,11 @@ export default function RegisterPage() {
       name: name || undefined,
       vendorId: vendorId || undefined,
     });
-
+    show({
+      variant: "success",
+      title: "Welcome to Tally!",
+      description: `Welcome ${email} to Tally!.`,
+    });
     // El backend ya inicia sesión y setea cookies → vamos al dashboard
     nav({ to: "/dashboard", replace: true });
   };

@@ -3,6 +3,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { Button, Card, ErrorBanner, TextField } from "../components";
 import { useLogin } from "../state/session";
+import { useToast } from "../ui/toast/ToastProvider";
 
 // ❗️No llamamos /auth/me acá. Solo cuando el usuario envía el form o entra a rutas protegidas.
 
@@ -61,6 +62,8 @@ export default function LoginPage() {
   const nextParam = searchParams.get("next");
   const next = nextParam && nextParam !== "/login" ? nextParam : "/dashboard";
 
+  const { show } = useToast();
+
   const emailRef = useRef<HTMLInputElement>(null);
   const passRef = useRef<HTMLInputElement>(null);
   const captchaRef = useRef<HTMLInputElement>(null);
@@ -115,6 +118,11 @@ export default function LoginPage() {
 
     try {
       await mutateAsync({ email, password });
+      show({
+        variant: "success",
+        title: "Welcome!",
+        description: `Welcome ${email}.`,
+      });
       nav({ to: next, replace: true });
     } catch {
       setFailCount((c) => c + 1);
@@ -222,7 +230,6 @@ export default function LoginPage() {
           Reenviar verificación
         </Link>
       </Card>
-      
     </div>
   );
 }

@@ -10,12 +10,14 @@ import {
   TextField,
 } from "../components";
 import { useResetPassword } from "../state/session";
+import { useToast } from "../ui/toast/ToastProvider";
 
 export default function ResetPasswordPage() {
   const { token } = useSearch({ from: "/reset-password" }) as {
     token?: string;
   };
   const nav = useNavigate();
+  const { show } = useToast();
 
   const passRef = useRef<HTMLInputElement>(null);
   const confRef = useRef<HTMLInputElement>(null);
@@ -50,6 +52,11 @@ export default function ResetPasswordPage() {
     if (cErr) return confRef.current?.focus();
 
     await mutateAsync({ token, password });
+    show({
+      variant: "success",
+      title: "Password was reset!",
+      description: `Password was reset.`,
+    });
   };
 
   const disabled = isPending || !!passErr || !!confErr;
