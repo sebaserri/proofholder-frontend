@@ -21,22 +21,22 @@ import {
 import { useLogout, useSessionQuery } from "./state/session";
 
 // --- Lazy pages ---
-const DashboardPage = lazy(() => import("./routes/dashboard"));
-const ForgotPasswordPage = lazy(() => import("./routes/forgot-password"));
-const LoginPage = lazy(() => import("./routes/login"));
-const RegisterPage = lazy(() => import("./routes/register"));
+const DashboardPage = lazy(() => import("./pages/dashboard"));
+const ForgotPasswordPage = lazy(() => import("./pages/forgot-password"));
+const LoginPage = lazy(() => import("./pages/login"));
+const RegisterPage = lazy(() => import("./pages/register"));
 const ResendVerificationPage = lazy(
-  () => import("./routes/resend-verification")
+  () => import("./pages/resend-verification")
 );
-const ResetPasswordPage = lazy(() => import("./routes/reset-password"));
-const VerifyEmailPage = lazy(() => import("./routes/verify-email"));
+const ResetPasswordPage = lazy(() => import("./pages/reset-password"));
+const VerifyEmailPage = lazy(() => import("./pages/verify-email"));
 
-const LogoutRoute = lazy(() => import("./routes/logout"));
-const AdminPage = lazy(() => import("./routes/admin"));
+const LogoutRoute = lazy(() => import("./pages/logout"));
+const AdminPage = lazy(() => import("./pages/admin"));
 
-const ProfilePage = lazy(() => import("./routes/profile"));
-const VendorPage = lazy(() => import("./routes/vendor"));
-const GuardPage = lazy(() => import("./routes/guard"));
+const ProfilePage = lazy(() => import("./pages/profile"));
+const VendorPage = lazy(() => import("./pages/vendor"));
+const GuardPage = lazy(() => import("./pages/guard"));
 
 export type RouterContext = {};
 
