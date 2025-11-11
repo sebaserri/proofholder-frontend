@@ -1,324 +1,452 @@
-// src/pages/coi/admin-detail.tsx
-import { useQuery } from "@tanstack/react-query";
+// src/routes/coi/admin-detail.tsx
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { format } from "date-fns";
 import {
+  AlertTriangle,
   ArrowLeft,
+  Building2,
+  Calendar,
   CheckCircle,
+  DollarSign,
   Download,
+  ExternalLink,
   FileText,
+  ShieldCheck,
+  User,
   XCircle,
 } from "lucide-react";
 import { useState } from "react";
-import { LoadingOverlay, QrCodeModal } from "../../components";
-import { useMutationToast } from "../../hooks/useMutationToast";
+import OcrExtractionButton from "../../components/OcrExtractionButton";
 import { fetchApi } from "../../lib/api";
-import { COI, COIReviewPayload, COIStatus, RequirementTemplate } from "../../types";
-import { useToast } from "../../ui/toast/ToastProvider";
+import type { COI, COIStatus } from "../../types/coi.types";
 
 export default function AdminCoiDetailPage() {
-  const { id } = useParams({ strict: false }) as { id?: string };
+  // En code-based routing, usa useParams con strict: false
+  const { id } = useParams({ strict: false });
   const navigate = useNavigate();
-  const { show } = useToast();
+  const queryClient = useQueryClient();
   const [reviewNotes, setReviewNotes] = useState("");
 
-  // Fetch COI detail
+  // Fetch COI details
   const {
     data: coi,
     isLoading,
-    refetch,
-  } = useQuery<COI>({
+    error,
+  } = useQuery({
     queryKey: ["coi", id],
     queryFn: () => fetchApi(`/cois/${id}`),
     enabled: !!id,
   });
 
-  // Fetch building requirements
-  const { data: requirements } = useQuery<RequirementTemplate[]>({
-    queryKey: ["requirements", coi?.building.id],
-    queryFn: () => fetchApi(`/buildings/${coi?.building.id}/requirements`),
-    enabled: !!coi?.building.id,
+  // Approve COI
+  const approveMutation = useMutation({
+    mutationFn: () =>
+      fetchApi(`/cois/${id}/approve`, {
+        method: "PATCH",
+        body: JSON.stringify({ notes: reviewNotes }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coi", id] });
+      queryClient.invalidateQueries({ queryKey: ["cois"] });
+      console.log("✓ COI approved");
+    },
   });
 
-  const activeReq = requirements?.find((r) => r.active);
+  // Reject COI
+  const rejectMutation = useMutation({
+    mutationFn: () =>
+      fetchApi(`/cois/${id}/reject`, {
+        method: "PATCH",
+        body: JSON.stringify({ notes: reviewNotes }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["coi", id] });
+      queryClient.invalidateQueries({ queryKey: ["cois"] });
+      console.log("✓ COI rejected");
+    },
+  });
 
-  // Review mutation
-  const reviewMutation = useMutationToast(
-    (payload: COIReviewPayload) =>
-      fetchApi(`/cois/${id}/review`, { method: "PATCH", body: payload }),
-    {
-      success: {
-        title: "Review Submitted",
-        description: "COI status has been updated",
-      },
-      onSuccess: () => {
-        refetch();
-        setReviewNotes("");
-      },
-    }
-  );
-
-  const handleApprove = () => {
-    reviewMutation.mutate({
-      status: "APPROVED",
-      notes: reviewNotes || undefined,
-    });
+  // Download all files as ZIP
+  const downloadZip = () => {
+    // Usa VITE_API_BASE_URL que está en tu .env
+    const apiUrl = import.meta.env.VITE_API_BASE_URL || "/api";
+    window.open(`${apiUrl}/cois/${id}/files.zip`, "_blank");
   };
 
-  const handleReject = () => {
-    if (!reviewNotes.trim()) {
-      show({
-        variant: "warning",
-        title: "Notes Required",
-        description: "Please provide a reason for rejection",
-      });
-      return;
-    }
-    reviewMutation.mutate({ status: "REJECTED", notes: reviewNotes });
-  };
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand"></div>
+      </div>
+    );
+  }
 
-  const handleDownloadZip = async () => {
-    try {
-      const blob = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL}/api/cois/${id}/files.zip`,
-        {
-          credentials: "include",
-        }
-      ).then((r) => r.blob());
+  if (error || !coi) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center">
+          <XCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold mb-2">COI Not Found</h2>
+          <p className="text-neutral-600 dark:text-neutral-400 mb-4">
+            The requested Certificate of Insurance could not be found.
+          </p>
+          <button
+            onClick={() => navigate({ to: "/admin/cois" })}
+            className="btn btn-primary"
+          >
+            Back to COIs
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `coi-${id}-files.zip`;
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      show({
-        variant: "error",
-        title: "Download failed",
-        description: String(error),
-      });
-    }
-  };
-
-  if (isLoading) return <LoadingOverlay />;
-  if (!coi) return <div className="text-center py-16">COI not found</div>;
-
-  const isExpired =
-    coi.expirationDate && new Date(coi.expirationDate) < new Date();
-  const isExpiringSoon =
-    coi.expirationDate &&
-    new Date(coi.expirationDate) <
-      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const typedCoi = coi as COI;
+  const isExpired = typedCoi.expirationDate
+    ? new Date(typedCoi.expirationDate) < new Date()
+    : false;
+  const daysUntilExpiry = typedCoi.expirationDate
+    ? Math.ceil(
+        (new Date(typedCoi.expirationDate).getTime() - new Date().getTime()) /
+          (1000 * 60 * 60 * 24)
+      )
+    : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="container mx-auto px-4 py-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="mb-6">
         <button
           onClick={() => navigate({ to: "/admin/cois" })}
-          className="btn btn-ghost"
+          className="btn btn-ghost mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to List
+          Back to COIs
         </button>
-        {coi.files.length > 0 && (
-          <button onClick={handleDownloadZip} className="btn btn-ghost">
-            <Download className="h-4 w-4" />
-            Download All Files
-          </button>
-        )}
+
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">
+              Certificate of Insurance
+            </h1>
+            <p className="text-neutral-600 dark:text-neutral-400">
+              COI ID: {typedCoi.id}
+            </p>
+          </div>
+
+          {/* Status Badge */}
+          <StatusBadge status={typedCoi.status} />
+        </div>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Left Column: COI Details */}
-        <div className="md:col-span-2 space-y-6">
-          {/* Status Card */}
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold">Certificate Details</h2>
-              <StatusBadge status={coi.status} />
+      {/* Expiration Warning */}
+      {isExpired && (
+        <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-red-600" />
+            <span className="font-semibold text-red-900 dark:text-red-100">
+              This COI has expired
+            </span>
+          </div>
+        </div>
+      )}
+
+      {daysUntilExpiry !== null &&
+        daysUntilExpiry > 0 &&
+        daysUntilExpiry <= 30 && (
+          <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <span className="font-semibold text-amber-900 dark:text-amber-100">
+                Expires in {daysUntilExpiry} day
+                {daysUntilExpiry !== 1 ? "s" : ""}
+              </span>
             </div>
+          </div>
+        )}
 
-            {/* Expiration Warning */}
-            {isExpired && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-200">
-                ⚠️ <strong>Expired:</strong> This certificate expired on{" "}
-                {format(new Date(coi.expirationDate!), "MM/dd/yyyy")}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content - Left Side */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Basic Information */}
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">Basic Information</h2>
+            </div>
+            <div className="card-body">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <InfoField
+                  icon={<User className="h-4 w-4" />}
+                  label="Vendor"
+                  value={typedCoi.vendor.legalName}
+                  sublabel={typedCoi.vendor.contactEmail}
+                />
+                <InfoField
+                  icon={<Building2 className="h-4 w-4" />}
+                  label="Building"
+                  value={typedCoi.building.name}
+                  sublabel={typedCoi.building.address}
+                />
+                {typedCoi.insuredName && (
+                  <InfoField
+                    icon={<ShieldCheck className="h-4 w-4" />}
+                    label="Insured Name"
+                    value={typedCoi.insuredName}
+                  />
+                )}
+                {typedCoi.producer && (
+                  <InfoField
+                    icon={<FileText className="h-4 w-4" />}
+                    label="Producer"
+                    value={typedCoi.producer}
+                  />
+                )}
+                {typedCoi.certificateHolder && (
+                  <InfoField
+                    icon={<FileText className="h-4 w-4" />}
+                    label="Certificate Holder"
+                    value={typedCoi.certificateHolder}
+                  />
+                )}
               </div>
-            )}
-            {!isExpired && isExpiringSoon && (
-              <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg text-sm text-amber-800 dark:text-amber-200">
-                ⏰ <strong>Expiring Soon:</strong> Certificate expires on{" "}
-                {format(new Date(coi.expirationDate!), "MM/dd/yyyy")}
-              </div>
-            )}
-
-            <dl className="space-y-4">
-              <DetailRow label="Vendor" value={coi.vendor.legalName} />
-              <DetailRow
-                label="Building"
-                value={`${coi.building.name} (${coi.building.address})`}
-              />
-              <DetailRow label="Producer" value={coi.producer} />
-              <DetailRow label="Insured Name" value={coi.insuredName} />
-              <DetailRow
-                label="Effective Date"
-                value={
-                  coi.effectiveDate
-                    ? format(new Date(coi.effectiveDate), "MM/dd/yyyy")
-                    : undefined
-                }
-              />
-              <DetailRow
-                label="Expiration Date"
-                value={
-                  coi.expirationDate
-                    ? format(new Date(coi.expirationDate), "MM/dd/yyyy")
-                    : undefined
-                }
-              />
-            </dl>
+            </div>
           </div>
 
-          {/* Coverage Card */}
-          <div className="card p-6">
-            <h3 className="text-lg font-semibold mb-4">Coverage Details</h3>
-            <dl className="grid grid-cols-2 gap-4">
-              <CoverageRow
-                label="General Liability"
-                value={coi.generalLiabLimit}
-                min={activeReq?.generalLiabMin}
-              />
-              <CoverageRow
-                label="Auto Liability"
-                value={coi.autoLiabLimit}
-                min={activeReq?.autoLiabMin}
-              />
-              <CoverageRow
-                label="Umbrella"
-                value={coi.umbrellaLimit}
-                min={activeReq?.umbrellaMin}
-              />
-              <CheckRow
-                label="Workers Comp"
-                checked={coi.workersComp}
-                required={activeReq?.workersCompRequired}
-              />
-              <CheckRow
-                label="Additional Insured"
-                checked={coi.additionalInsured}
-              />
-              <CheckRow
-                label="Waiver of Subrogation"
-                checked={coi.waiverOfSubrogation}
-              />
-            </dl>
-            {coi.certificateHolder && (
-              <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-800">
-                <DetailRow
-                  label="Certificate Holder"
-                  value={coi.certificateHolder}
+          {/* Policy Dates */}
+          {(typedCoi.effectiveDate || typedCoi.expirationDate) && (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title">Policy Dates</h2>
+              </div>
+              <div className="card-body">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {typedCoi.effectiveDate && (
+                    <InfoField
+                      icon={<Calendar className="h-4 w-4" />}
+                      label="Effective Date"
+                      value={new Date(
+                        typedCoi.effectiveDate
+                      ).toLocaleDateString()}
+                    />
+                  )}
+                  {typedCoi.expirationDate && (
+                    <InfoField
+                      icon={<Calendar className="h-4 w-4" />}
+                      label="Expiration Date"
+                      value={new Date(
+                        typedCoi.expirationDate
+                      ).toLocaleDateString()}
+                      isWarning={isExpired}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Coverage Limits */}
+          {(typedCoi.generalLiabLimit ||
+            typedCoi.autoLiabLimit ||
+            typedCoi.umbrellaLimit) && (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title">Coverage Limits</h2>
+              </div>
+              <div className="card-body">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {typedCoi.generalLiabLimit && (
+                    <InfoField
+                      icon={<DollarSign className="h-4 w-4" />}
+                      label="General Liability"
+                      value={`$${typedCoi.generalLiabLimit.toLocaleString()}`}
+                    />
+                  )}
+                  {typedCoi.autoLiabLimit && (
+                    <InfoField
+                      icon={<DollarSign className="h-4 w-4" />}
+                      label="Auto Liability"
+                      value={`$${typedCoi.autoLiabLimit.toLocaleString()}`}
+                    />
+                  )}
+                  {typedCoi.umbrellaLimit && (
+                    <InfoField
+                      icon={<DollarSign className="h-4 w-4" />}
+                      label="Umbrella"
+                      value={`$${typedCoi.umbrellaLimit.toLocaleString()}`}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Coverage Features */}
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">Coverage Features</h2>
+            </div>
+            <div className="card-body">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FeatureBadge
+                  label="Workers Compensation"
+                  active={typedCoi.workersComp}
+                />
+                <FeatureBadge
+                  label="Additional Insured"
+                  active={typedCoi.additionalInsured}
+                />
+                <FeatureBadge
+                  label="Waiver of Subrogation"
+                  active={typedCoi.waiverOfSubrogation}
                 />
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Files Card */}
-          {coi.files.length > 0 && (
-            <div className="card p-6">
-              <h3 className="text-lg font-semibold mb-4">Attached Files</h3>
-              <div className="space-y-2">
-                {coi.files.map((file) => (
-                  <a
-                    key={file.id}
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-neutral-50 dark:hover:bg-neutral-900 transition"
+          {/* Attached Files */}
+          <div className="card">
+            <div className="card-header">
+              <div className="flex items-center justify-between">
+                <h2 className="card-title">Attached Files</h2>
+                {typedCoi.files.length > 0 && (
+                  <button
+                    onClick={downloadZip}
+                    className="btn btn-ghost btn-sm"
                   >
-                    <FileText className="h-5 w-5 text-neutral-400" />
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{file.kind}</p>
-                      <p className="text-xs text-neutral-500">PDF Document</p>
-                    </div>
-                    <Download className="h-4 w-4 text-neutral-400" />
-                  </a>
-                ))}
+                    <Download className="h-4 w-4" />
+                    Download All (ZIP)
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="card-body">
+              {typedCoi.files.length === 0 ? (
+                <p className="text-neutral-500 text-center py-4">
+                  No files attached
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {typedCoi.files.map((file) => (
+                    <a
+                      key={file.id}
+                      href={file.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-3 rounded-lg border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-brand" />
+                        <div>
+                          <p className="font-medium">{file.kind}</p>
+                          <p className="text-xs text-neutral-500">
+                            PDF Document
+                          </p>
+                        </div>
+                      </div>
+                      <ExternalLink className="h-4 w-4 text-neutral-400" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Review Notes */}
+          {typedCoi.notes && (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title">Review Notes</h2>
+              </div>
+              <div className="card-body">
+                <p className="text-sm text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap">
+                  {typedCoi.notes}
+                </p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Right Column: Review Panel */}
+        {/* Actions Sidebar - Right Side */}
         <div className="space-y-6">
-          {/* Review Card */}
-          {coi.status === "PENDING" && (
-            <div className="card p-6 sticky top-6">
-              <h3 className="text-lg font-semibold mb-4">Review Certificate</h3>
-              <div className="space-y-4">
+          {/* Quick Actions */}
+          {typedCoi.status === "PENDING" && (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="card-title">Review Actions</h2>
+              </div>
+              <div className="card-body space-y-4">
+                {/* OCR Extraction Button */}
+                <div className="pb-4 border-b border-neutral-200 dark:border-neutral-800">
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-3">
+                    Extract data automatically from PDF
+                  </p>
+                  <OcrExtractionButton coiId={typedCoi.id} />
+                </div>
+
+                {/* Review Notes */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Notes (optional for approval, required for rejection)
+                    Review Notes
                   </label>
                   <textarea
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
-                    className="field min-h-[100px]"
                     placeholder="Add notes about this review..."
+                    rows={4}
+                    className="w-full px-3 py-2 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 focus:ring-2 focus:ring-brand focus:border-transparent"
                   />
                 </div>
+
+                {/* Action Buttons */}
                 <div className="space-y-2">
-                  <QrCodeModal
-                    vendorId={coi.vendorId}
-                    buildingId={coi.buildingId}
-                    vendorName={coi.vendor?.legalName}
-                    buildingName={coi.building?.name}
-                  />
                   <button
-                    onClick={handleApprove}
-                    className="btn btn-primary w-full"
-                    disabled={reviewMutation.isPending}
+                    onClick={() => approveMutation.mutate()}
+                    disabled={
+                      approveMutation.isPending || rejectMutation.isPending
+                    }
+                    className="btn btn-success w-full"
                   >
                     <CheckCircle className="h-4 w-4" />
-                    Approve
+                    {approveMutation.isPending ? "Approving..." : "Approve COI"}
                   </button>
+
                   <button
-                    onClick={handleReject}
-                    className="btn btn-ghost w-full text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    disabled={reviewMutation.isPending}
+                    onClick={() => rejectMutation.mutate()}
+                    disabled={
+                      approveMutation.isPending || rejectMutation.isPending
+                    }
+                    className="btn btn-danger w-full"
                   >
                     <XCircle className="h-4 w-4" />
-                    Reject
+                    {rejectMutation.isPending ? "Rejecting..." : "Reject COI"}
                   </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Status History */}
-          {coi.notes && (
-            <div className="card p-6">
-              <h3 className="text-lg font-semibold mb-4">Review Notes</h3>
-              <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                {coi.notes}
-              </p>
             </div>
           )}
 
           {/* Metadata */}
-          <div className="card p-6">
-            <h3 className="text-lg font-semibold mb-4">Metadata</h3>
-            <dl className="space-y-2 text-sm">
-              <div>
-                <dt className="text-neutral-500">Created</dt>
-                <dd>{format(new Date(coi.createdAt), "MMM dd, yyyy HH:mm")}</dd>
-              </div>
-              <div>
-                <dt className="text-neutral-500">Last Updated</dt>
-                <dd>{format(new Date(coi.updatedAt), "MMM dd, yyyy HH:mm")}</dd>
-              </div>
-            </dl>
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">Metadata</h2>
+            </div>
+            <div className="card-body space-y-3">
+              <MetadataField
+                label="Created"
+                value={new Date(typedCoi.createdAt).toLocaleString()}
+              />
+              <MetadataField
+                label="Last Updated"
+                value={new Date(typedCoi.updatedAt).toLocaleString()}
+              />
+              <MetadataField label="COI ID" value={typedCoi.id} mono />
+              <MetadataField label="Vendor ID" value={typedCoi.vendorId} mono />
+              <MetadataField
+                label="Building ID"
+                value={typedCoi.buildingId}
+                mono
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -326,82 +454,80 @@ export default function AdminCoiDetailPage() {
   );
 }
 
+// Helper Components
 function StatusBadge({ status }: { status: COIStatus }) {
-  const config = {
-    PENDING: {
-      className:
-        "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200",
-    },
-    APPROVED: {
-      className:
-        "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200",
-    },
-    REJECTED: {
-      className: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200",
-    },
+  const styles = {
+    PENDING:
+      "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+    APPROVED:
+      "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+    REJECTED: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
   };
+
   return (
     <span
-      className={`px-3 py-1 rounded-full text-sm font-medium ${config[status].className}`}
+      className={`px-3 py-1 rounded-full text-sm font-semibold ${styles[status]}`}
     >
       {status}
     </span>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value?: string }) {
-  return (
-    <div>
-      <dt className="text-sm text-neutral-500">{label}</dt>
-      <dd className="mt-1 font-medium">{value || "—"}</dd>
-    </div>
-  );
-}
-
-function CoverageRow({
+function InfoField({
+  icon,
   label,
   value,
-  min,
+  sublabel,
+  isWarning,
 }: {
+  icon: React.ReactNode;
   label: string;
-  value?: number;
-  min?: number;
+  value: string;
+  sublabel?: string;
+  isWarning?: boolean;
 }) {
-  const meets = !min || !value || value >= min;
   return (
     <div>
-      <dt className="text-sm text-neutral-500">{label}</dt>
-      <dd className={`mt-1 font-medium ${!meets ? "text-red-600" : ""}`}>
-        {value ? `$${value.toLocaleString()}` : "—"}
-        {min && (
-          <span className="text-xs text-neutral-500 ml-1">
-            (min: ${min.toLocaleString()})
-          </span>
-        )}
-      </dd>
+      <div className="flex items-center gap-2 text-xs font-medium text-neutral-500 mb-1">
+        {icon}
+        {label}
+      </div>
+      <p className={`text-sm font-medium ${isWarning ? "text-red-600" : ""}`}>
+        {value}
+      </p>
+      {sublabel && <p className="text-xs text-neutral-500 mt-1">{sublabel}</p>}
     </div>
   );
 }
 
-function CheckRow({
+function FeatureBadge({ label, active }: { label: string; active?: boolean }) {
+  return (
+    <div className="flex items-center gap-2 p-3 rounded-lg border border-neutral-200 dark:border-neutral-800">
+      {active ? (
+        <CheckCircle className="h-5 w-5 text-green-600" />
+      ) : (
+        <XCircle className="h-5 w-5 text-neutral-400" />
+      )}
+      <span className="text-sm font-medium">{label}</span>
+    </div>
+  );
+}
+
+function MetadataField({
   label,
-  checked,
-  required,
+  value,
+  mono,
 }: {
   label: string;
-  checked?: boolean;
-  required?: boolean;
+  value: string;
+  mono?: boolean;
 }) {
-  const meets = !required || checked;
   return (
     <div>
-      <dt className="text-sm text-neutral-500">{label}</dt>
-      <dd className={`mt-1 font-medium ${!meets ? "text-red-600" : ""}`}>
-        {checked ? "✓ Yes" : "✗ No"}
-        {required && (
-          <span className="text-xs text-neutral-500 ml-1">(required)</span>
-        )}
-      </dd>
+      <label className="block text-xs font-medium text-neutral-500 mb-1">
+        {label}
+      </label>
+      <p className={`text-sm ${mono ? "font-mono" : ""}`}>{value}</p>
     </div>
   );
 }
