@@ -1,4 +1,4 @@
-// src/lib/api-client.ts
+// src/lib/api.ts
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

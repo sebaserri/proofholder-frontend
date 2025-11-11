@@ -2,9 +2,10 @@ import { createContext, useCallback, useContext, useState } from "react";
 
 type ConfirmOpts = {
   title?: string;
-  message?: string;
+  description?: string;
   confirmText?: string;
   cancelText?: string;
+  variant?: string;
 };
 
 type Ctx = (opts: ConfirmOpts) => Promise<boolean>;
@@ -47,7 +48,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               {state.opts.title ?? "Confirmar acción"}
             </h2>
             <p className="mt-2 text-sm text-neutral-500">
-              {state.opts.message ?? "¿Estás seguro?"}
+              {state.opts.description ?? "¿Estás seguro?"}
             </p>
             <div className="mt-6 flex items-center justify-end gap-3">
               <button

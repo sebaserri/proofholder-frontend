@@ -1,13 +1,15 @@
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import {
   Button,
   Card,
   ErrorBanner,
   PageTitle,
-  PasswordStrength,
-  TextField,
+  PasswordStrength
 } from "../components";
 import { Role, SessionUser, useRegister } from "../state/session";
 import { useToast } from "../ui/toast/ToastProvider";
@@ -33,91 +35,94 @@ const MailIcon = (
   </svg>
 );
 
-const validateEmail = (v: string) => {
-  if (!v.trim()) return "El email es obligatorio";
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "" : "Formato inválido";
-};
-const validatePass = (v: string) =>
-  v.length >= 6 ? "" : "Mínimo 6 caracteres";
-const validateConf = (p: string, c: string) =>
-  p === c ? "" : "Las contraseñas no coinciden";
+const registerSchema = z
+  .object({
+    email: z
+      .string()
+      .min(1, "El email es obligatorio")
+      .email("Formato inválido"),
+    name: z.string().optional(),
+    vendorId: z.string().optional(),
+    role: z.enum(["ADMIN", "VENDOR", "GUARD"]),
+    password: z.string().min(6, "Mínimo 6 caracteres"),
+    confirmPassword: z.string().min(1, "Confirma tu contraseña"),
+    acceptTos: z.boolean().refine((val) => val === true, {
+      message: "Debes aceptar los términos y condiciones",
+    }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden",
+    path: ["confirmPassword"],
+  });
+
+type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const qc = useQueryClient();
   const cachedMe = qc.getQueryData<SessionUser | null>(["me"]);
   const nav = useNavigate();
-
   const { show } = useToast();
 
   useEffect(() => {
-    if (cachedMe) nav({ to: "/dashboard", replace: true });
+    if (cachedMe) {
+      const redirectPath =
+        cachedMe.role === "ADMIN"
+          ? "/admin"
+          : cachedMe.role === "VENDOR"
+          ? "/vendor"
+          : "/guard/check";
+      nav({ to: redirectPath, replace: true });
+    }
   }, [cachedMe, nav]);
 
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [vendorId, setVendorId] = useState("");
-  const [role, setRole] = useState<Role>("VENDOR");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-
-  const [tEmail, setTEmail] = useState(false);
-  const [tPass, setTPass] = useState(false);
-  const [tConf, setTConf] = useState(false);
-  const [acceptTos, setAcceptTos] = useState(false);
-
-  // refs para auto-focus del primer error
-  const emailRef = useRef<HTMLInputElement>(null);
-  const passRef = useRef<HTMLInputElement>(null);
-  const confRef = useRef<HTMLInputElement>(null);
-
-  const emailErr = useMemo(
-    () => (tEmail ? validateEmail(email) : ""),
-    [email, tEmail]
-  );
-  const passErr = useMemo(
-    () => (tPass ? validatePass(password) : ""),
-    [password, tPass]
-  );
-  const confErr = useMemo(
-    () => (tConf ? validateConf(password, confirm) : ""),
-    [password, confirm, tConf]
-  );
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isValid },
+  } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
+    mode: "onTouched",
+    defaultValues: {
+      email: "",
+      name: "",
+      vendorId: "",
+      role: "VENDOR",
+      password: "",
+      confirmPassword: "",
+      acceptTos: false,
+    },
+  });
 
   const { mutateAsync, isPending, error } = useRegister();
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTEmail(true);
-    setTPass(true);
-    setTConf(true);
+  const password = watch("password");
+  const role = watch("role");
 
-    const eErr = validateEmail(email);
-    const pErr = validatePass(password);
-    const cErr = validateConf(password, confirm);
-
-    if (eErr) return emailRef.current?.focus();
-    if (pErr) return passRef.current?.focus();
-    if (cErr) return confRef.current?.focus();
-    if (!acceptTos) return;
-
+  const onSubmit = async (data: RegisterFormData) => {
     await mutateAsync({
-      email,
-      password,
-      role,
-      name: name || undefined,
-      vendorId: vendorId || undefined,
+      email: data.email,
+      password: data.password,
+      role: data.role as Role,
+      name: data.name || undefined,
+      vendorId: data.vendorId || undefined,
     });
+
     show({
       variant: "success",
       title: "Welcome to Tally!",
-      description: `Welcome ${email} to Tally!.`,
+      description: `Welcome ${data.email} to Tally!`,
     });
-    // El backend ya inicia sesión y setea cookies → vamos al dashboard
-    nav({ to: "/dashboard", replace: true });
-  };
 
-  const isDisabled =
-    isPending || !!emailErr || !!passErr || !!confErr || !acceptTos;
+    const redirectPath =
+      role === "ADMIN"
+        ? "/admin"
+        : role === "VENDOR"
+        ? "/vendor"
+        : "/guard/check";
+
+    nav({ to: redirectPath, replace: true });
+  };
 
   return (
     <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-6 px-2 sm:max-w-2xl dark:text-neutral-200">
@@ -128,69 +133,81 @@ export default function RegisterPage() {
       <Card padding="lg">
         <form
           className="grid grid-cols-1 gap-5 sm:grid-cols-2"
-          onSubmit={onSubmit}
+          onSubmit={handleSubmit(onSubmit)}
           noValidate
           aria-busy={isPending}
         >
           <div className="sm:col-span-2">
-            <TextField
-              ref={emailRef}
-              label="Email"
-              type="email"
-              required
-              value={email}
-              onBlur={() => setTEmail(true)}
-              onChange={(e) => setEmail(e.currentTarget.value)}
-              leftIcon={MailIcon}
-              error={emailErr}
-              placeholder="tu@email.com"
-              inputMode="email"
-              autoComplete="email"
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
+              Email *
+            </label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                {MailIcon}
+              </div>
+              <input
+                type="email"
+                {...register("email")}
+                className="field pl-10"
+                placeholder="tu@email.com"
+                autoComplete="email"
+              />
+            </div>
+            {errors.email && (
+              <p className="text-sm text-red-600 mt-1">
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
+              Nombre (opcional)
+            </label>
+            <input
+              type="text"
+              {...register("name")}
+              className="field"
+              autoComplete="name"
             />
           </div>
 
-          <TextField
-            label="Nombre (opcional)"
-            value={name}
-            onChange={(e) => setName(e.currentTarget.value)}
-            autoComplete="name"
-          />
-
           <div>
-            <label className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-              Rol
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
+              Rol *
             </label>
-            <select
-              className="mt-1 field w-full rounded-xl"
-              value={role}
-              onChange={(e) => setRole(e.currentTarget.value as Role)}
-            >
+            <select {...register("role")} className="field">
               <option value="ADMIN">ADMIN</option>
               <option value="VENDOR">VENDOR</option>
               <option value="GUARD">GUARD</option>
             </select>
           </div>
 
-          <TextField
-            label="Vendor ID (opcional)"
-            value={vendorId}
-            onChange={(e) => setVendorId(e.currentTarget.value)}
-            autoComplete="off"
-          />
+          <div className="sm:col-span-2">
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
+              Vendor ID (opcional)
+            </label>
+            <input
+              type="text"
+              {...register("vendorId")}
+              className="field"
+              autoComplete="off"
+            />
+          </div>
 
           <div className="sm:col-span-2 space-y-2">
-            <TextField
-              ref={passRef}
-              label="Contraseña"
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
+              Contraseña *
+            </label>
+            <input
               type="password"
-              required
-              value={password}
-              onBlur={() => setTPass(true)}
-              onChange={(e) => setPassword(e.currentTarget.value)}
-              revealToggle
-              error={passErr}
+              {...register("password")}
+              className="field"
               autoComplete="new-password"
             />
+            {errors.password && (
+              <p className="text-sm text-red-600">{errors.password.message}</p>
+            )}
             <PasswordStrength value={password} />
             <p className="text-xs text-neutral-500">
               Mínimo 6 caracteres. Recomendado 12+ con mayúsculas, números y
@@ -199,27 +216,28 @@ export default function RegisterPage() {
           </div>
 
           <div className="sm:col-span-2">
-            <TextField
-              ref={confRef}
-              label="Confirmar contraseña"
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
+              Confirmar contraseña *
+            </label>
+            <input
               type="password"
-              required
-              value={confirm}
-              onBlur={() => setTConf(true)}
-              onChange={(e) => setConfirm(e.currentTarget.value)}
-              revealToggle
-              error={confErr}
+              {...register("confirmPassword")}
+              className="field"
               autoComplete="new-password"
             />
+            {errors.confirmPassword && (
+              <p className="text-sm text-red-600 mt-1">
+                {errors.confirmPassword.message}
+              </p>
+            )}
           </div>
 
           <div className="sm:col-span-2">
             <label className="flex items-center gap-3 text-sm">
               <input
                 type="checkbox"
+                {...register("acceptTos")}
                 className="h-4 w-4 rounded border-neutral-300"
-                checked={acceptTos}
-                onChange={(e) => e.currentTarget.checked && setAcceptTos(true)}
               />
               <span>
                 Acepto los{" "}
@@ -229,6 +247,11 @@ export default function RegisterPage() {
                 .
               </span>
             </label>
+            {errors.acceptTos && (
+              <p className="text-sm text-red-600 mt-1">
+                {errors.acceptTos.message}
+              </p>
+            )}
           </div>
 
           <div className="sm:col-span-2 space-y-3">
@@ -241,7 +264,7 @@ export default function RegisterPage() {
                 type="submit"
                 loading={isPending}
                 loadingText="Creando…"
-                disabled={isDisabled}
+                disabled={isPending || !isValid}
               >
                 Crear cuenta
               </Button>

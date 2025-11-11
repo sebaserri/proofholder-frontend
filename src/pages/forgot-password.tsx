@@ -1,7 +1,9 @@
 // src/routes/forgot-password.tsx
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
-import { Button, Card, ErrorBanner, PageTitle, TextField } from "../components";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Button, Card, ErrorBanner, PageTitle } from "../components";
 import { useForgotPassword } from "../state/session";
 
 const MailIcon = (
@@ -22,31 +24,33 @@ const MailIcon = (
   </svg>
 );
 
-export default function ForgotPasswordPage() {
-  const emailRef = useRef<HTMLInputElement>(null);
+const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .min(1, "El email es obligatorio")
+    .email("Formato de email inválido"),
+});
 
-  const [email, setEmail] = useState("");
-  const [touched, setTouched] = useState(false);
+type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
+
+export default function ForgotPasswordPage() {
   const { mutateAsync, isPending, error, isSuccess } = useForgotPassword();
 
-  const emailErr = useMemo(() => {
-    if (!touched) return "";
-    if (!email) return "El email es obligatorio";
-    const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    return ok ? "" : "Formato de email inválido";
-  }, [email, touched]);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<ForgotPasswordFormData>({
+    resolver: zodResolver(forgotPasswordSchema),
+    mode: "onTouched",
+    defaultValues: {
+      email: "",
+    },
+  });
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTouched(true);
-    if (emailErr) {
-      emailRef.current?.focus();
-      return;
-    }
-    await mutateAsync(email);
+  const onSubmit = async (data: ForgotPasswordFormData) => {
+    await mutateAsync(data.email);
   };
-
-  const disabled = isPending || !!emailErr || !email;
 
   return (
     <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-6 px-2 sm:max-w-lg">
@@ -57,26 +61,36 @@ export default function ForgotPasswordPage() {
       <Card padding="lg" className="space-y-4">
         <form
           className="space-y-5"
-          onSubmit={onSubmit}
+          onSubmit={handleSubmit(onSubmit)}
           noValidate
           aria-busy={isPending}
         >
-          <TextField
-            ref={emailRef}
-            label="Email"
-            type="email"
-            autoComplete="email"
-            required
-            aria-invalid={!!emailErr}
-            value={email}
-            onBlur={() => setTouched(true)}
-            onChange={(e) => setEmail(e.currentTarget.value)}
-            leftIcon={MailIcon}
-            help="Usá el email con el que te registraste."
-            error={emailErr}
-            placeholder="tu@email.com"
-            inputMode="email"
-          />
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
+              Email *
+            </label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
+                {MailIcon}
+              </div>
+              <input
+                type="email"
+                {...register("email")}
+                className="field pl-10"
+                placeholder="tu@email.com"
+                autoComplete="email"
+                aria-invalid={!!errors.email}
+              />
+            </div>
+            {errors.email && (
+              <p className="text-sm text-red-600 mt-1">
+                {errors.email.message}
+              </p>
+            )}
+            <p className="text-xs text-neutral-500 mt-2">
+              Usá el email con el que te registraste.
+            </p>
+          </div>
 
           <ErrorBanner msg={(error as any)?.message} />
 
@@ -96,7 +110,7 @@ export default function ForgotPasswordPage() {
               type="submit"
               loading={isPending}
               loadingText="Enviando…"
-              disabled={disabled}
+              disabled={isPending || !isValid}
             >
               Enviar enlace
             </Button>

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchApi } from "../lib/api-client";
+import { fetchApi } from "../lib/api";
 
 export type Role = "ADMIN" | "VENDOR" | "GUARD";
 export type SessionUser = {

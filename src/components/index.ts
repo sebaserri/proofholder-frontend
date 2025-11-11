@@ -23,3 +23,5 @@ export { default as UnverifiedEmailBanner } from "./UnverifiedEmailBanner";
 export { default as ThemeToggle } from './ThemeToggle';
 export { default as SessionExpiredModal } from './SessionExpiredModal';
 export { default as Breadcrumbs } from './Breadcrumbs';
+export { default as QrCodeModal } from './QrCodeModal';
+export { default as QrCodeMoOcrExtractionButton } from './OcrExtractionButton';

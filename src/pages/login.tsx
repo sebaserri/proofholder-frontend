@@ -1,11 +1,19 @@
-// src/routes/login.tsx
+// src/pages/login.tsx
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
-import { Button, Card, ErrorBanner, TextField } from "../components";
+import { useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Button, Card, ErrorBanner } from "../components";
 import { useLogin } from "../state/session";
 import { useToast } from "../ui/toast/ToastProvider";
 
-// ❗️No llamamos /auth/me acá. Solo cuando el usuario envía el form o entra a rutas protegidas.
+const loginSchema = z.object({
+  email: z.string().email("Invalid email format").min(1, "Email is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
 
 const MailIcon = (
   <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
@@ -27,6 +35,7 @@ const MailIcon = (
     />
   </svg>
 );
+
 const LockIcon = (
   <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
     <rect
@@ -48,136 +57,129 @@ const LockIcon = (
   </svg>
 );
 
-const validateEmail = (v: string) => {
-  if (!v.trim()) return "El email es obligatorio";
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "" : "Formato inválido";
-};
-const validatePassword = (v: string) =>
-  v ? "" : "La contraseña es obligatoria";
-
 export default function LoginPage() {
   const nav = useNavigate();
   const location = useRouterState({ select: (s) => s.location });
   const searchParams = new URLSearchParams(location.searchStr ?? "");
   const nextParam = searchParams.get("next");
-  const next = nextParam && nextParam !== "/login" ? nextParam : "/dashboard";
 
   const { show } = useToast();
 
-  const emailRef = useRef<HTMLInputElement>(null);
-  const passRef = useRef<HTMLInputElement>(null);
   const captchaRef = useRef<HTMLInputElement>(null);
 
-  const [email, setEmail] = useState("");
-  const [touchedEmail, setTouchedEmail] = useState(false);
-  const [password, setPassword] = useState("");
-  const [touchedPass, setTouchedPass] = useState(false);
+  // React Hook Form
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+  });
 
-  // brute-force guard
+  // Brute-force guard
   const [failCount, setFailCount] = useState(0);
   const needsCaptcha = failCount >= 3;
   const [captchaOK, setCaptchaOK] = useState(false);
   const [captchaErr, setCaptchaErr] = useState("");
 
-  const emailErr = useMemo(
-    () => (touchedEmail ? validateEmail(email) : ""),
-    [email, touchedEmail]
-  );
-  const passErr = useMemo(
-    () => (touchedPass ? validatePassword(password) : ""),
-    [password, touchedPass]
-  );
-
   const { mutateAsync, isPending, error } = useLogin();
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // marcar como "tocado" para mostrar errores
-    setTouchedEmail(true);
-    setTouchedPass(true);
-
-    // validar _sincrónicamente_ para decidir foco y evitar llamadas
-    const emailNow = validateEmail(email);
-    const passNow = validatePassword(password);
-
-    if (emailNow) {
-      emailRef.current?.focus();
-      return;
-    }
-    if (passNow) {
-      passRef.current?.focus();
-      return;
-    }
+  const onSubmit = async (data: LoginFormData) => {
     if (needsCaptcha && !captchaOK) {
-      setCaptchaErr("Confirmá que no sos un robot.");
+      setCaptchaErr("Please confirm you're not a robot.");
       captchaRef.current?.focus();
       return;
     }
     setCaptchaErr("");
 
     try {
-      await mutateAsync({ email, password });
+      const result = await mutateAsync(data);
+      const role = result.user.role;
+
       show({
         variant: "success",
         title: "Welcome!",
-        description: `Welcome ${email}.`,
+        description: `Logged in as ${data.email}`,
       });
-      nav({ to: next, replace: true });
+
+      // Redirect based on role or next param
+      let redirectTo = nextParam || "/profile";
+
+      if (!nextParam) {
+        if (role === "ADMIN") {
+          redirectTo = "/admin/cois";
+        } else if (role === "GUARD") {
+          redirectTo = "/guard/check";
+        } else if (role === "VENDOR") {
+          redirectTo = "/vendor";
+        }
+      }
+
+      nav({ to: redirectTo, replace: true });
     } catch {
       setFailCount((c) => c + 1);
-      // si falló y ahora requiere captcha, mover el foco
       setTimeout(() => {
         if (needsCaptcha && !captchaOK) captchaRef.current?.focus();
       }, 0);
     }
   };
 
-  const isDisabled =
-    isPending || !!emailErr || !!passErr || (needsCaptcha && !captchaOK);
+  const isDisabled = isPending || (needsCaptcha && !captchaOK);
 
   return (
     <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-6 px-2 sm:max-w-lg">
       <Card padding="lg" className="space-y-4">
         <form
           className="space-y-5"
-          onSubmit={onSubmit}
+          onSubmit={handleSubmit(onSubmit)}
           noValidate
           aria-busy={isPending}
         >
-          <TextField
-            ref={emailRef}
-            label="Email"
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            required
-            aria-invalid={!!emailErr}
-            value={email}
-            onBlur={() => setTouchedEmail(true)}
-            onChange={(e) => setEmail(e.currentTarget.value)}
-            leftIcon={MailIcon}
-            placeholder="tu@email.com"
-            error={emailErr}
-          />
+          <div>
+            <label className="block text-sm font-medium mb-2">Email</label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
+                {MailIcon}
+              </div>
+              <input
+                {...register("email")}
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="your@email.com"
+                className="field pl-10"
+                aria-invalid={!!errors.email}
+              />
+            </div>
+            {errors.email && (
+              <p className="text-sm text-red-600 mt-1">
+                {errors.email.message}
+              </p>
+            )}
+          </div>
 
-          <TextField
-            ref={passRef}
-            label="Contraseña"
-            type="password"
-            autoComplete="current-password"
-            required
-            aria-invalid={!!passErr}
-            value={password}
-            onBlur={() => setTouchedPass(true)}
-            onChange={(e) => setPassword(e.currentTarget.value)}
-            placeholder="••••••••"
-            leftIcon={LockIcon}
-            revealToggle
-            error={passErr}
-          />
+          <div>
+            <label className="block text-sm font-medium mb-2">Password</label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
+                {LockIcon}
+              </div>
+              <input
+                {...register("password")}
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                className="field pl-10"
+                aria-invalid={!!errors.password}
+              />
+            </div>
+            {errors.password && (
+              <p className="text-sm text-red-600 mt-1">
+                {errors.password.message}
+              </p>
+            )}
+          </div>
 
-          {/* Captcha simple condicional tras varios intentos fallidos */}
           {needsCaptcha && (
             <div className="space-y-1">
               <label className="flex items-center gap-3 text-sm">
@@ -191,7 +193,7 @@ export default function LoginPage() {
                     if (e.currentTarget.checked) setCaptchaErr("");
                   }}
                 />
-                <span>No soy un robot</span>
+                <span>I'm not a robot</span>
               </label>
               {captchaErr && (
                 <p className="text-xs text-red-600">{captchaErr}</p>
@@ -203,31 +205,34 @@ export default function LoginPage() {
 
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Link to="/forgot-password" className="link text-sm">
-              ¿Olvidaste tu contraseña?
+              Forgot password?
             </Link>
             <Button
               type="submit"
               loading={isPending}
-              loadingText="Ingresando…"
+              loadingText="Logging in…"
               disabled={isDisabled}
             >
-              Ingresar
+              Log In
             </Button>
           </div>
         </form>
       </Card>
 
       <Card padding="md" className="flex items-center justify-between gap-4">
-        <p className="text-sm dark:text-neutral-200">¿No tenés cuenta?</p>
+        <p className="text-sm dark:text-neutral-200">Don't have an account?</p>
         <Link to="/register" className="btn btn-ghost dark:text-neutral-200">
-          Crear cuenta
+          Create Account
         </Link>
       </Card>
 
       <Card padding="md" className="flex items-center justify-between gap-4">
-        <p className="text-sm dark:text-neutral-200">¿No te llegó el email?</p>
-        <Link to="/resend-verification" className="btn btn-ghost dark:text-neutral-200">
-          Reenviar verificación
+        <p className="text-sm dark:text-neutral-200">Didn't receive email?</p>
+        <Link
+          to="/resend-verification"
+          className="btn btn-ghost dark:text-neutral-200"
+        >
+          Resend Verification
         </Link>
       </Card>
     </div>

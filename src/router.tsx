@@ -11,6 +11,7 @@ import {
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { Suspense, lazy, useEffect, useRef } from "react";
+import RequireRole from "./auth/RequireRole";
 import {
   Breadcrumbs,
   LoadingOverlay,
@@ -21,7 +22,6 @@ import {
 import { useLogout, useSessionQuery } from "./state/session";
 
 // --- Lazy pages ---
-const DashboardPage = lazy(() => import("./pages/dashboard"));
 const ForgotPasswordPage = lazy(() => import("./pages/forgot-password"));
 const LoginPage = lazy(() => import("./pages/login"));
 const RegisterPage = lazy(() => import("./pages/register"));
@@ -30,23 +30,40 @@ const ResendVerificationPage = lazy(
 );
 const ResetPasswordPage = lazy(() => import("./pages/reset-password"));
 const VerifyEmailPage = lazy(() => import("./pages/verify-email"));
-
 const LogoutRoute = lazy(() => import("./pages/logout"));
-const AdminPage = lazy(() => import("./pages/admin"));
-
 const ProfilePage = lazy(() => import("./pages/profile"));
+
+// COI Pages
+const PublicSubmitPage = lazy(() => import("./pages/coi/public-submit"));
+const AdminCoiListPage = lazy(() => import("./pages/coi/admin-list"));
+const AdminCoiDetailPage = lazy(() => import("./pages/coi/admin-detail"));
+const AdminRequestCoiPage = lazy(() => import("./pages/coi/admin-request"));
+const GuardCheckPage = lazy(() => import("./pages/coi/guard-check"));
+
+// Vendor Pages
 const VendorPage = lazy(() => import("./pages/vendor"));
-const GuardPage = lazy(() => import("./pages/guard"));
+
+// Admin Pages
+const BuildingsManagementPage = lazy(
+  () => import("./pages/admin/buildings/BuildingsManagement")
+);
+const VendorsManagementPage = lazy(
+  () => import("./pages/admin/vendors/VendorsManagement")
+);
+const RequirementsManagementPage = lazy(
+  () => import("./pages/admin/RequirementsManagement")
+);
+const AuditLogsViewerPage = lazy(() => import("./pages/admin/AuditLogsViewer"));
+const SettingsPanelPage = lazy(() => import("./pages/admin/SettingsPanel"));
+
+// Guard Pages
+const GuardVendorsListPage = lazy(
+  () => import("./pages/guard/GuardVendorsList")
+);
 
 export type RouterContext = {};
 
-const PROTECTED_PREFIXES = [
-  "/dashboard",
-  "/vendor",
-  "/guard",
-  "/admin",
-  "/profile",
-];
+const PROTECTED_PREFIXES = ["/vendor", "/guard", "/admin", "/profile"];
 
 // ---------------- UI bits ----------------
 function TopProgress() {
@@ -71,7 +88,7 @@ function SkipToContent() {
       href="#main"
       className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:shadow-lg dark:focus:bg-neutral-900"
     >
-      Saltar al contenido
+      Skip to content
     </a>
   );
 }
@@ -91,7 +108,7 @@ function AuthHeader() {
   const nav = useNavigate();
   const logout = useLogout();
 
-  // ❗️No llamamos /auth/me en páginas públicas. Solo en rutas protegidas.
+  // Only check session in protected routes
   const shouldCheckSession = PROTECTED_PREFIXES.some((p) =>
     location.pathname.startsWith(p)
   );
@@ -108,15 +125,26 @@ function AuthHeader() {
         <Link to="/" className="font-semibold text-lg">
           <span className="text-brand">Tally</span>
         </Link>
-
         <nav className="text-sm flex items-center gap-2">
           {me ? (
             <>
-              <NavLink to="/dashboard">Panel</NavLink>
+              {me.role === "ADMIN" && (
+                <>
+                  <NavLink to="/admin/cois">COIs</NavLink>
+                  <NavLink to="/admin/buildings">Buildings</NavLink>
+                  <NavLink to="/admin/vendors">Vendors</NavLink>
+                  <NavLink to="/admin/audit">Audit</NavLink>
+                  <NavLink to="/admin/settings">Settings</NavLink>
+                </>
+              )}
+              {me.role === "GUARD" && (
+                <>
+                  <NavLink to="/guard/check">Check</NavLink>
+                  <NavLink to="/guard/vendors">Vendors</NavLink>
+                </>
+              )}
               {me.role === "VENDOR" && <NavLink to="/vendor">Vendor</NavLink>}
-              {me.role === "GUARD" && <NavLink to="/guard">Guard</NavLink>}
-              {me.role === "ADMIN" && <NavLink to="/admin">Admin</NavLink>}
-              <NavLink to="/profile">Perfil</NavLink>
+              <NavLink to="/profile">Profile</NavLink>
               <button
                 className="btn btn-ghost"
                 onClick={() =>
@@ -125,10 +153,10 @@ function AuthHeader() {
                   })
                 }
                 disabled={logout.isPending}
-                aria-label="Salir"
-                title="Cerrar sesión"
+                aria-label="Logout"
+                title="Log out"
               >
-                {logout.isPending ? "Saliendo…" : "Salir"}
+                {logout.isPending ? "Logging out…" : "Logout"}
               </button>
             </>
           ) : (
@@ -139,9 +167,9 @@ function AuthHeader() {
                 className="link px-2 py-1 rounded-lg"
                 activeProps={{ className: "font-semibold" }}
               >
-                Ingresar
+                Log In
               </Link>
-              <NavLink to="/register">Registrarme</NavLink>
+              <NavLink to="/register">Sign Up</NavLink>
             </>
           )}
         </nav>
@@ -166,8 +194,6 @@ function Shell() {
       <SkipToContent />
       <AuthHeader />
       <SessionExpiredModal />
-
-      {/* Banner de email no verificado (solo mostrará algo si hay user en cache y emailVerified === false) */}
       <UnverifiedEmailBanner className="mt-2" />
       <main
         id="main"
@@ -203,9 +229,7 @@ function GuardLoading() {
   );
 }
 
-import RequireRole from "./auth/RequireRole";
 function RequireAuth({ children }: { children: ReactNode }) {
-  // ✅ En rutas protegidas sí chequeamos /auth/me
   const { data: me, isLoading } = useSessionQuery({ enabled: true });
   const nav = useNavigate();
   const redirected = useRef(false);
@@ -213,7 +237,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isLoading && !me && !redirected.current) {
       redirected.current = true;
-      nav({ to: "/login", search: { next: "/dashboard" }, replace: true });
+      nav({ to: "/login", replace: true });
     }
   }, [isLoading, me, nav]);
 
@@ -227,20 +251,20 @@ const rootRoute = createRootRouteWithContext<RouterContext>()({
   component: Shell,
   errorComponent: ({ error }) => (
     <div className="mx-auto max-w-md text-center">
-      <h1 className="text-2xl font-semibold">Algo salió mal</h1>
+      <h1 className="text-2xl font-semibold">Something went wrong</h1>
       <p className="mt-2 text-sm text-neutral-500 break-words">
-        {(error as any)?.message ?? "Error desconocido"}
+        {(error as any)?.message ?? "Unknown error"}
       </p>
       <div className="mt-6">
         <Link to="/" className="btn btn-primary">
-          Volver al inicio
+          Go Home
         </Link>
       </div>
     </div>
   ),
 });
 
-// "/" y "/login" SIEMPRE renderizan el login sin tocar el backend
+// Public routes
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
@@ -302,18 +326,15 @@ const resendRoute = createRoute({
   component: () => <ResendVerificationPage />,
 });
 
-// Dashboard protegido
-const dashboardRoute = createRoute({
+// Public COI submission
+const publicSubmitRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/dashboard",
-  staticData: { breadcrumb: "Dashboard" },
-  component: () => (
-    <RequireAuth>
-      <DashboardPage />
-    </RequireAuth>
-  ),
+  path: "/submit/$token",
+  staticData: { breadcrumb: "Submit COI" },
+  component: () => <PublicSubmitPage />,
 });
 
+// Protected routes
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/profile",
@@ -325,40 +346,159 @@ const profileRoute = createRoute({
   ),
 });
 
+// Admin routes
+const adminRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin",
+  component: () => {
+    const navigate = useNavigate();
+    useEffect(() => {
+      navigate({ to: "/admin/cois", replace: true });
+    }, [navigate]);
+    return null;
+  },
+});
+
+const adminCoiListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/cois",
+  staticData: { breadcrumb: "COIs" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <AdminCoiListPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminCoiDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/cois/$id",
+  staticData: { breadcrumb: "COI Detail" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <AdminCoiDetailPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminRequestRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/request",
+  staticData: { breadcrumb: "Request COI" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <AdminRequestCoiPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminBuildingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/buildings",
+  staticData: { breadcrumb: "Buildings" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <BuildingsManagementPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminVendorsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/vendors",
+  staticData: { breadcrumb: "Vendors" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <VendorsManagementPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminRequirementsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/buildings/$id/requirements",
+  staticData: { breadcrumb: "Requirements" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <RequirementsManagementPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminAuditRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/audit",
+  staticData: { breadcrumb: "Audit Logs" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <AuditLogsViewerPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminSettingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/settings",
+  staticData: { breadcrumb: "Settings" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["ADMIN"]}>
+        <SettingsPanelPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+// Guard routes
+const guardCheckRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/guard/check",
+  staticData: { breadcrumb: "Access Check" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["GUARD", "ADMIN"]}>
+        <GuardCheckPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const guardVendorsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/guard/vendors",
+  staticData: { breadcrumb: "Vendors List" },
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["GUARD", "ADMIN"]}>
+        <GuardVendorsListPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+// Vendor route
 const vendorRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/vendor",
-  staticData: { breadcrumb: "Vendor" },
+  staticData: { breadcrumb: "Vendor Portal" },
   component: () => (
     <RequireAuth>
       <RequireRole anyOf={["VENDOR", "ADMIN"]}>
         <VendorPage />
-      </RequireRole>
-    </RequireAuth>
-  ),
-});
-
-const guardRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/guard",
-  staticData: { breadcrumb: "Guard" },
-  component: () => (
-    <RequireAuth>
-      <RequireRole anyOf={["GUARD", "ADMIN"]}>
-        <GuardPage />
-      </RequireRole>
-    </RequireAuth>
-  ),
-});
-
-const adminRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/admin",
-  staticData: { breadcrumb: "Admin" },
-  component: () => (
-    <RequireAuth>
-      <RequireRole anyOf={["ADMIN"]}>
-        <AdminPage />
       </RequireRole>
     </RequireAuth>
   ),
@@ -376,16 +516,16 @@ const notFoundRoute = createRoute({
   path: "*",
   component: () => (
     <div className="mx-auto max-w-md text-center">
-      <h1 className="text-2xl font-semibold">Página no encontrada</h1>
+      <h1 className="text-2xl font-semibold">Page not found</h1>
       <p className="mt-2 text-sm text-neutral-500">
-        No pudimos encontrar lo que buscabas.
+        We couldn't find what you're looking for.
       </p>
       <div className="mt-6 flex items-center justify-center gap-3">
         <Link to="/" className="btn btn-ghost">
-          Ir al inicio
+          Go Home
         </Link>
         <Link to="/login" className="btn btn-primary">
-          Ingresar
+          Log In
         </Link>
       </div>
     </div>
@@ -400,11 +540,20 @@ const routeTree = rootRoute.addChildren([
   resetRoute,
   verifyRoute,
   resendRoute,
-  dashboardRoute,
   profileRoute,
+  publicSubmitRoute,
   adminRoute,
+  adminCoiListRoute,
+  adminCoiDetailRoute,
+  adminRequestRoute,
+  adminBuildingsRoute,
+  adminVendorsRoute,
+  adminRequirementsRoute,
+  adminAuditRoute,
+  adminSettingsRoute,
+  guardCheckRoute,
+  guardVendorsRoute,
   vendorRoute,
-  guardRoute,
   logoutRoute,
   notFoundRoute,
 ]);
