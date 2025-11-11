@@ -40,7 +40,7 @@ const AdminRequestCoiPage = lazy(() => import("./routes/coi/admin-request"));
 const GuardCheckPage = lazy(() => import("./routes/coi/guard-check"));
 
 // Vendor Pages
-const VendorPage = lazy(() => import("./routes/vendor"));
+const VendorPage = lazy(() => import("./routes/vendor/vendor-portal"));
 
 // Admin Pages
 const BuildingsManagementPage = lazy(
