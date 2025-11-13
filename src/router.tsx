@@ -5,6 +5,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  useMatchRoute,
   useNavigate,
   useRouterState,
 } from "@tanstack/react-router";
@@ -14,11 +15,13 @@ import { Suspense, lazy, useEffect, useRef } from "react";
 import RequireRole from "./auth/RequireRole";
 import {
   LoadingOverlay,
+  Logo,
   PageSkeleton,
   SessionExpiredModal,
   UnverifiedEmailBanner,
 } from "./components";
 import { useLogout, useSessionQuery } from "./state/session";
+import { Building2, FileText, LogOut, Shield, User, Users } from "lucide-react";
 
 // --- Lazy pages ---
 const ForgotPasswordPage = lazy(() => import("./routes/forgot-password"));
@@ -93,13 +96,22 @@ function SkipToContent() {
   );
 }
 
-function NavLink(props: React.ComponentProps<typeof Link>) {
+export function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
+  const isActive = useMatchRoute();
+  const match = isActive({ to, fuzzy: true });
+
   return (
     <Link
-      {...props}
-      className={clsx("link px-2 py-1 rounded-lg", props.className)}
-      activeProps={{ className: "font-semibold" }}
-    />
+      to={to}
+      className={clsx(
+        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+        match
+          ? "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 shadow-sm"
+          : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900/50 hover:text-gray-900 dark:hover:text-white"
+      )}
+    >
+      {children}
+    </Link>
   );
 }
 
@@ -108,7 +120,6 @@ function AuthHeader() {
   const nav = useNavigate();
   const logout = useLogout();
 
-  // Only check session in protected routes
   const shouldCheckSession = PROTECTED_PREFIXES.some((p) =>
     location.pathname.startsWith(p)
   );
@@ -120,59 +131,90 @@ function AuthHeader() {
     : undefined;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-neutral-200/60 dark:border-neutral-800/60 backdrop-blur bg-white/70 dark:bg-neutral-950/70">
-      <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-        <Link to="/" className="font-semibold text-lg">
-          <span className="text-brand">ProofHolder</span>
-        </Link>
-        <nav className="text-sm flex items-center gap-2">
-          {me ? (
-            <>
-              {me.role === "ADMIN" && (
-                <>
-                  <NavLink to="/admin/cois">COIs</NavLink>
-                  <NavLink to="/admin/buildings">Buildings</NavLink>
-                  <NavLink to="/admin/vendors">Vendors</NavLink>
-                  <NavLink to="/admin/audit">Audit</NavLink>
-                  <NavLink to="/admin/settings">Settings</NavLink>
-                </>
-              )}
-              {me.role === "GUARD" && (
-                <>
-                  <NavLink to="/guard/check">Check</NavLink>
-                  <NavLink to="/guard/vendors">Vendors</NavLink>
-                </>
-              )}
-              {me.role === "VENDOR" && <NavLink to="/vendor">Vendor</NavLink>}
-              <NavLink to="/profile">Profile</NavLink>
-              <button
-                className="btn btn-ghost"
-                onClick={() =>
-                  logout.mutate(undefined, {
-                    onSuccess: () => nav({ to: "/login", replace: true }),
-                  })
-                }
-                disabled={logout.isPending}
-                aria-label="Logout"
-                title="Log out"
-              >
-                {logout.isPending ? "Logging out…" : "Logout"}
-              </button>
-            </>
-          ) : (
-            <>
-              <Link
-                to="/login"
-                search={next ? { next } : undefined}
-                className="link px-2 py-1 rounded-lg"
-                activeProps={{ className: "font-semibold" }}
-              >
-                Log In
-              </Link>
-              <NavLink to="/register">Sign Up</NavLink>
-            </>
-          )}
-        </nav>
+    <header className="sticky top-0 z-50 border-b border-gray-200/60 dark:border-gray-800/60 backdrop-blur-md bg-white/80 dark:bg-gray-950/80 shadow-sm">
+      <div className="mx-auto max-w-7xl px-6 py-4">
+        <div className="flex items-center justify-between">
+          {/* Logo */}
+          <Link
+            to="/"
+            className="flex items-center gap-3 group transition-transform hover:scale-105"
+          >
+            <Logo />
+          </Link>
+
+          {/* Navigation */}
+          <nav className="flex items-center gap-1">
+            {me && (
+              <>
+                {me.role === "ADMIN" && (
+                  <>
+                    <NavLink to="/admin/cois">
+                      <FileText className="h-4 w-4" />
+                      <span>Certificates</span>
+                    </NavLink>
+                    <NavLink to="/admin/buildings">
+                      <Building2 className="h-4 w-4" />
+                      <span>Buildings</span>
+                    </NavLink>
+                    <NavLink to="/admin/vendors">
+                      <Users className="h-4 w-4" />
+                      <span>Vendors</span>
+                    </NavLink>
+                    <NavLink to="/admin/audit">
+                      <Shield className="h-4 w-4" />
+                      <span>Audit</span>
+                    </NavLink>
+                  </>
+                )}
+
+                {me.role === "GUARD" && (
+                  <>
+                    <NavLink to="/guard/check">
+                      <Shield className="h-4 w-4" />
+                      <span>Access Check</span>
+                    </NavLink>
+                    <NavLink to="/guard/vendors">
+                      <Users className="h-4 w-4" />
+                      <span>Vendors</span>
+                    </NavLink>
+                  </>
+                )}
+
+                {me.role === "VENDOR" && (
+                  <NavLink to="/vendor">
+                    <FileText className="h-4 w-4" />
+                    <span>Dashboard</span>
+                  </NavLink>
+                )}
+
+                {/* Divider */}
+                <div className="h-6 w-px bg-gray-200 dark:bg-gray-800 mx-2"></div>
+
+                {/* Profile Link */}
+                <NavLink to="/profile">
+                  <User className="h-4 w-4" />
+                  <span>Profile</span>
+                </NavLink>
+
+                {/* Logout Button */}
+                <button
+                  onClick={() =>
+                    logout.mutate(undefined, {
+                      onSuccess: () => nav({ to: "/login", replace: true }),
+                    })
+                  }
+                  disabled={logout.isPending}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>
+                    {logout.isPending ? "Signing out..." : "Sign Out"}
+                  </span>
+                </button>
+              </>
+            )}
+          </nav>
+        </div>
       </div>
     </header>
   );

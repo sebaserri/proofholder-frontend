@@ -4,9 +4,9 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Button, Card, ErrorBanner } from "../components";
 import { useLogin } from "../state/session";
 import { useToast } from "../ui/toast/ToastProvider";
+import { Alert, Badge, Button, Card, Checkbox, Divider, Input } from "../components";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email format").min(1, "Email is required"),
@@ -15,6 +15,7 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
+// Icons
 const MailIcon = (
   <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
     <path
@@ -53,6 +54,16 @@ const LockIcon = (
       stroke="currentColor"
       strokeWidth="2"
       fill="none"
+    />
+  </svg>
+);
+
+const ShieldIcon = (
+  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+    <path
+      fillRule="evenodd"
+      d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+      clipRule="evenodd"
     />
   </svg>
 );
@@ -102,7 +113,6 @@ export default function LoginPage() {
         description: `Logged in as ${data.email}`,
       });
 
-      // Redirect based on role or next param
       let redirectTo = nextParam || "/profile";
 
       if (!nextParam) {
@@ -127,114 +137,135 @@ export default function LoginPage() {
   const isDisabled = isPending || (needsCaptcha && !captchaOK);
 
   return (
-    <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-6 px-2 sm:max-w-lg">
-      <Card padding="lg" className="space-y-4">
-        <form
-          className="space-y-5"
-          onSubmit={handleSubmit(onSubmit)}
-          noValidate
-          aria-busy={isPending}
-        >
-          <div>
-            <label className="block text-sm font-medium mb-2">Email</label>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
-                {MailIcon}
-              </div>
-              <input
-                {...register("email")}
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="your@email.com"
-                className="field pl-10"
-                aria-invalid={!!errors.email}
-              />
-            </div>
-            {errors.email && (
-              <p className="text-sm text-red-600 mt-1">
-                {errors.email.message}
-              </p>
-            )}
+    <div className="min-h-[calc(100vh-200px)] flex items-center justify-center py-12 px-4">
+      <div className="w-full max-w-md space-y-6">
+        {/* Main Login Card */}
+        <Card variant="glass" padding="xl">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-black mb-3">
+              <span className="bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                Welcome Back
+              </span>
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 font-medium">
+              Log in to manage your COI compliance
+            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Password</label>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
-                {LockIcon}
-              </div>
-              <input
-                {...register("password")}
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                className="field pl-10"
-                aria-invalid={!!errors.password}
-              />
-            </div>
-            {errors.password && (
-              <p className="text-sm text-red-600 mt-1">
-                {errors.password.message}
-              </p>
-            )}
-          </div>
+          {/* Form */}
+          <form
+            className="space-y-5"
+            onSubmit={handleSubmit(onSubmit)}
+            noValidate
+            aria-busy={isPending}
+          >
+            {/* Email Field */}
+            <Input
+              {...register("email")}
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="you@company.com"
+              label="Email Address"
+              error={errors.email?.message}
+              leftIcon={MailIcon}
+            />
 
-          {needsCaptcha && (
-            <div className="space-y-1">
-              <label className="flex items-center gap-3 text-sm">
-                <input
-                  ref={captchaRef}
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-neutral-300"
+            {/* Password Field */}
+            <Input
+              {...register("password")}
+              type="password"
+              autoComplete="current-password"
+              placeholder="••••••••"
+              label="Password"
+              error={errors.password?.message}
+              leftIcon={LockIcon}
+            />
+
+            {/* Captcha */}
+            {needsCaptcha && (
+              <Card tone="info" padding="sm">
+                <Checkbox
                   checked={captchaOK}
                   onChange={(e) => {
                     setCaptchaOK(e.currentTarget.checked);
                     if (e.currentTarget.checked) setCaptchaErr("");
                   }}
+                  label="I'm not a robot"
+                  error={captchaErr}
                 />
-                <span>I'm not a robot</span>
-              </label>
-              {captchaErr && (
-                <p className="text-xs text-red-600">{captchaErr}</p>
-              )}
+              </Card>
+            )}
+
+            {/* Error Alert */}
+            {error && (
+              <Alert variant="danger">
+                {(error as any)?.message || "Login failed"}
+              </Alert>
+            )}
+
+            {/* Remember Me & Forgot Password */}
+            <div className="flex items-center justify-between">
+              <Checkbox label="Remember me" size="sm" />
+              <Link
+                to="/forgot-password"
+                className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-bold transition-colors hover:underline"
+              >
+                Forgot password?
+              </Link>
             </div>
-          )}
 
-          <ErrorBanner msg={(error as any)?.message} />
-
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Link to="/forgot-password" className="link text-sm">
-              Forgot password?
-            </Link>
+            {/* Submit Button */}
             <Button
               type="submit"
-              loading={isPending}
-              loadingText="Logging in…"
               disabled={isDisabled}
+              loading={isPending}
+              loadingText="Logging in..."
+              size="lg"
+              fullWidth
             >
-              Log In
+              Sign In
             </Button>
+          </form>
+
+          {/* Divider */}
+          <Divider className="my-6" />
+
+          {/* Register Link */}
+          <p className="text-center text-sm text-gray-700 dark:text-gray-300 font-medium">
+            Don't have an account?{" "}
+            <Link
+              to="/register"
+              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-bold transition-colors hover:underline"
+            >
+              Create Account
+            </Link>
+          </p>
+        </Card>
+
+        {/* Security Badge */}
+        <div className="flex justify-center">
+          <Badge variant="success" size="md" icon={ShieldIcon}>
+            Secured with 256-bit encryption
+          </Badge>
+        </div>
+
+        {/* Verification Card */}
+        <Card hoverable padding="md">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+              Didn't receive verification email?
+            </p>
+            <Link
+              to="/resend-verification"
+              className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-bold transition-colors whitespace-nowrap hover:underline"
+            >
+              Resend →
+            </Link>
           </div>
-        </form>
-      </Card>
-
-      <Card padding="md" className="flex items-center justify-between gap-4">
-        <p className="text-sm dark:text-neutral-200">Don't have an account?</p>
-        <Link to="/register" className="btn btn-ghost dark:text-neutral-200">
-          Create Account
-        </Link>
-      </Card>
-
-      <Card padding="md" className="flex items-center justify-between gap-4">
-        <p className="text-sm dark:text-neutral-200">Didn't receive email?</p>
-        <Link
-          to="/resend-verification"
-          className="btn btn-ghost dark:text-neutral-200"
-        >
-          Resend Verification
-        </Link>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }
