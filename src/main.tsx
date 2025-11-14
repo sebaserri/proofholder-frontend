@@ -73,7 +73,7 @@ function AppProviders() {
         <ConfirmProvider>
           <RouterProvider router={router} />
         </ConfirmProvider>
-        <ConnectionStatus />
+        {/* <ConnectionStatus /> */}
         <AuthExpiredModal />
         <DebugPanel />
       </ToastProvider>
