@@ -116,7 +116,11 @@ export default function LoginPage() {
       let redirectTo = nextParam || "/profile";
 
       if (!nextParam) {
-        if (role === "ADMIN") {
+        const isManagement =
+          role === "ACCOUNT_OWNER" ||
+          role === "PORTFOLIO_MANAGER" ||
+          role === "PROPERTY_MANAGER";
+        if (isManagement) {
           redirectTo = "/admin/cois";
         } else if (role === "GUARD") {
           redirectTo = "/guard/check";

@@ -1,5 +1,4 @@
 // src/pages/coi/guard-check.tsx
-import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Building as BuildingIcon,
@@ -7,9 +6,9 @@ import {
   Search,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LoadingOverlay, QrCodeModal } from "../../components";
-import { fetchApi } from "../../lib/api";
+import { useApi } from "../../hooks/useApi";
 import { AccessCheckResult, Building, Vendor } from "../../types";
 
 export default function GuardCheckPage() {
@@ -21,39 +20,58 @@ export default function GuardCheckPage() {
   );
 
   // Fetch buildings
-  const { data: buildings = [], isLoading: loadingBuildings } = useQuery<
-    Building[]
-  >({
-    queryKey: ["buildings"],
-    queryFn: () => fetchApi("/buildings"),
+  const {
+    data: buildings,
+    loading: loadingBuildings,
+    execute: fetchBuildings,
+  } = useApi<Building[]>("/buildings", {
+    showErrorToast: true,
   });
 
   // Search vendors
-  const { data: vendors = [], isLoading: loadingVendors } = useQuery<Vendor[]>({
-    queryKey: ["vendors-search", vendorSearch],
-    queryFn: () => fetchApi(`/vendors/search?q=${vendorSearch}`),
-    enabled: vendorSearch.length >= 2,
-  });
+  const {
+    data: vendors,
+    loading: loadingVendors,
+    execute: fetchVendors,
+  } = useApi<Vendor[]>(
+    `/vendors/search?q=${encodeURIComponent(vendorSearch)}`,
+    {
+      showErrorToast: true,
+    }
+  );
 
   // Check access
-  const { refetch: checkAccess, isFetching: checking } =
-    useQuery<AccessCheckResult>({
-      queryKey: ["access-check", selectedVendor?.id, selectedBuilding],
-      queryFn: () => {
-        if (!selectedVendor?.id || !selectedBuilding) {
-          throw new Error("Missing vendor or building");
-        }
-        return fetchApi(
-          `/access/check?vendorId=${selectedVendor.id}&buildingId=${selectedBuilding}`
-        );
-      },
-      enabled: false, // Manual trigger
-    });
+  const {
+    data: accessData,
+    loading: checking,
+    execute: executeAccessCheck,
+  } = useApi<AccessCheckResult>(
+    `/access/check?vendorId=${selectedVendor?.id ?? ""}&buildingId=${selectedBuilding}`,
+    {
+      showErrorToast: true,
+    }
+  );
+
+  useEffect(() => {
+    fetchBuildings();
+  }, [fetchBuildings]);
+
+  useEffect(() => {
+    if (vendorSearch.length < 2 || selectedVendor) return;
+    fetchVendors();
+  }, [vendorSearch, selectedVendor, fetchVendors]);
+
+  const buildingList = buildings ?? [];
+  const vendorList = vendors ?? [];
 
   const handleCheck = async () => {
     if (!selectedVendor || !selectedBuilding) return;
-    const { data } = await checkAccess();
-    setCheckResult(data || null);
+    try {
+      const result = await executeAccessCheck();
+      setCheckResult(result || accessData || null);
+    } catch {
+      // Error already handled by useApi
+    }
   };
 
   const handleReset = () => {
@@ -64,7 +82,7 @@ export default function GuardCheckPage() {
 
   if (loadingBuildings) return <LoadingOverlay />;
 
-  const building = buildings.find((b) => b.id === selectedBuilding);
+  const building = buildingList.find((b) => b.id === selectedBuilding);
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -92,7 +110,7 @@ export default function GuardCheckPage() {
           className="field"
         >
           <option value="">Choose a building...</option>
-          {buildings.map((b) => (
+          {buildingList.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
             </option>
@@ -158,12 +176,12 @@ export default function GuardCheckPage() {
                 <p className="text-sm text-neutral-500 text-center py-8">
                   Searching...
                 </p>
-              ) : vendors.length === 0 ? (
+              ) : vendorList.length === 0 ? (
                 <p className="text-sm text-neutral-500 text-center py-8">
                   No vendors found with "{vendorSearch}"
                 </p>
               ) : (
-                vendors.map((v) => (
+                vendorList.map((v) => (
                   <button
                     key={v.id}
                     onClick={() => {
@@ -197,12 +215,12 @@ export default function GuardCheckPage() {
       {checkResult && selectedVendor && (
         <div
           className={`card p-8 text-center ${
-            checkResult.status === "APTO"
+            checkResult.isApproved
               ? "bg-green-50 dark:bg-green-950/20 border-green-500"
               : "bg-red-50 dark:bg-red-950/20 border-red-500"
           }`}
         >
-          {checkResult.status === "APTO" ? (
+          {checkResult.isApproved ? (
             <>
               <CheckCircle className="h-20 w-20 text-green-600 dark:text-green-400 mx-auto mb-4" />
               <h2 className="text-3xl font-bold text-green-900 dark:text-green-100 mb-2">
@@ -219,13 +237,13 @@ export default function GuardCheckPage() {
                   buildingName={building?.name}
                 />
               </div>
-              {checkResult.coi && (
+              {checkResult.expirationDate && (
                 <div className="inline-block bg-white dark:bg-neutral-900 rounded-lg p-4 text-sm mt-4">
                   <p className="text-neutral-600 dark:text-neutral-400">
                     COI expires:{" "}
                     <strong>
                       {new Date(
-                        checkResult.coi.expirationDate
+                        checkResult.expirationDate
                       ).toLocaleDateString()}
                     </strong>
                   </p>
@@ -241,18 +259,16 @@ export default function GuardCheckPage() {
               <p className="text-lg text-red-700 dark:text-red-300 mb-6">
                 {selectedVendor.legalName} is not authorized
               </p>
-              {checkResult.reasons && checkResult.reasons.length > 0 && (
+              {checkResult.reason && (
                 <div className="inline-block bg-white dark:bg-neutral-900 rounded-lg p-4 text-left">
                   <p className="font-semibold text-sm text-red-900 dark:text-red-100 mb-2">
                     Reasons:
                   </p>
                   <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">
-                    {checkResult.reasons.map((reason, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                        <span>{reason}</span>
-                      </li>
-                    ))}
+                    <li className="flex items-start gap-2">
+                      <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>{checkResult.reason}</span>
+                    </li>
                   </ul>
                 </div>
               )}

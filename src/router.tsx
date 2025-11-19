@@ -43,6 +43,12 @@ const GuardCheckPage = lazy(() => import("./routes/coi/guard-check"));
 
 // Vendor Pages
 const VendorPage = lazy(() => import("./routes/vendor/vendor-portal"));
+const TenantPortalPage = lazy(
+  () => import("./routes/tenant/tenant-portal")
+);
+const AdminVendorDetailPage = lazy(
+  () => import("./routes/admin/vendors/vendor-detail")
+);
 
 // Admin Pages
 const BuildingsManagementPage = lazy(
@@ -50,6 +56,15 @@ const BuildingsManagementPage = lazy(
 );
 const VendorsManagementPage = lazy(
   () => import("./routes/admin/vendors/vendors-management")
+);
+const TenantsManagementPage = lazy(
+  () => import("./routes/admin/tenants/tenants-management")
+);
+const TenantDetailPage = lazy(
+  () => import("./routes/admin/tenants/tenant-detail")
+);
+const TeamManagementPage = lazy(
+  () => import("./routes/admin/team/team-management")
 );
 const RequirementsManagementPage = lazy(
   () => import("./routes/admin/requirements-management")
@@ -65,7 +80,7 @@ const GuardVendorsListPage = lazy(
 
 export type RouterContext = {};
 
-const PROTECTED_PREFIXES = ["/vendor", "/guard", "/admin", "/profile"];
+const PROTECTED_PREFIXES = ["/vendor", "/guard", "/admin", "/profile", "/tenant"];
 
 // ---------------- UI bits ----------------
 function TopProgress() {
@@ -145,7 +160,9 @@ function AuthHeader() {
           <nav className="flex items-center gap-1">
             {me && (
               <>
-                {me.role === "ADMIN" && (
+                {(me.role === "ACCOUNT_OWNER" ||
+                  me.role === "PORTFOLIO_MANAGER" ||
+                  me.role === "PROPERTY_MANAGER") && (
                   <>
                     <NavLink to="/admin/cois">
                       <FileText className="h-4 w-4" />
@@ -323,6 +340,20 @@ const loginRoute = createRoute({
 const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/register",
+  validateSearch: (s: Record<string, unknown>) =>
+    ({
+      email: typeof s.email === "string" ? s.email : undefined,
+      role: typeof s.role === "string" ? s.role : undefined,
+      invited: typeof s.invited === "string" ? s.invited : undefined,
+      firstName: typeof s.firstName === "string" ? s.firstName : undefined,
+      lastName: typeof s.lastName === "string" ? s.lastName : undefined,
+    } as {
+      email?: string;
+      role?: string;
+      invited?: string;
+      firstName?: string;
+      lastName?: string;
+    }),
   component: () => <RegisterPage />,
 });
 
@@ -345,6 +376,29 @@ const resetRoute = createRoute({
 const verifyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/verify-email",
+  validateSearch: (s: Record<string, unknown>) =>
+    ({ token: typeof s.token === "string" ? s.token : undefined } as {
+      token?: string;
+    }),
+  component: () => <VerifyEmailPage />,
+});
+
+// Rutas compatibles con los enlaces enviados por el backend:
+// PUBLIC_APP_URL/(auth)/verify-email?token=...
+// PUBLIC_APP_URL/(auth)/reset-password?token=...
+const resetAuthSegmentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/(auth)/reset-password",
+  validateSearch: (s: Record<string, unknown>) =>
+    ({ token: typeof s.token === "string" ? s.token : undefined } as {
+      token?: string;
+    }),
+  component: () => <ResetPasswordPage />,
+});
+
+const verifyAuthSegmentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/(auth)/verify-email",
   validateSearch: (s: Record<string, unknown>) =>
     ({ token: typeof s.token === "string" ? s.token : undefined } as {
       token?: string;
@@ -394,7 +448,9 @@ const adminCoiListRoute = createRoute({
   path: "/admin/cois",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["ADMIN"]}>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
         <AdminCoiListPage />
       </RequireRole>
     </RequireAuth>
@@ -406,7 +462,9 @@ const adminCoiDetailRoute = createRoute({
   path: "/admin/cois/$id",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["ADMIN"]}>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
         <AdminCoiDetailPage />
       </RequireRole>
     </RequireAuth>
@@ -418,7 +476,9 @@ const adminRequestRoute = createRoute({
   path: "/admin/request",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["ADMIN"]}>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
         <AdminRequestCoiPage />
       </RequireRole>
     </RequireAuth>
@@ -430,7 +490,9 @@ const adminBuildingsRoute = createRoute({
   path: "/admin/buildings",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["ADMIN"]}>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
         <BuildingsManagementPage />
       </RequireRole>
     </RequireAuth>
@@ -442,8 +504,75 @@ const adminVendorsRoute = createRoute({
   path: "/admin/vendors",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["ADMIN"]}>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
         <VendorsManagementPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminTenantsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/tenants",
+  component: () => (
+    <RequireAuth>
+      <RequireRole
+        anyOf={[
+          "ACCOUNT_OWNER",
+          "PORTFOLIO_MANAGER",
+          "PROPERTY_MANAGER",
+          "BUILDING_OWNER",
+        ]}
+      >
+        <TenantsManagementPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminTenantDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/tenants/$id",
+  component: () => (
+    <RequireAuth>
+      <RequireRole
+        anyOf={[
+          "ACCOUNT_OWNER",
+          "PORTFOLIO_MANAGER",
+          "PROPERTY_MANAGER",
+          "BUILDING_OWNER",
+        ]}
+      >
+        <TenantDetailPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const adminTeamRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/team",
+  component: () => (
+    <RequireAuth>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
+        <TeamManagementPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+const adminVendorDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/vendors/$id",
+  component: () => (
+    <RequireAuth>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
+        <AdminVendorDetailPage />
       </RequireRole>
     </RequireAuth>
   ),
@@ -454,7 +583,9 @@ const adminRequirementsRoute = createRoute({
   path: "/admin/buildings/$id/requirements",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["ADMIN"]}>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
         <RequirementsManagementPage />
       </RequireRole>
     </RequireAuth>
@@ -466,7 +597,9 @@ const adminAuditRoute = createRoute({
   path: "/admin/audit",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["ADMIN"]}>
+      <RequireRole
+        anyOf={["ACCOUNT_OWNER", "PORTFOLIO_MANAGER", "PROPERTY_MANAGER"]}
+      >
         <AuditLogsViewerPage />
       </RequireRole>
     </RequireAuth>
@@ -479,7 +612,14 @@ const guardCheckRoute = createRoute({
   path: "/guard/check",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["GUARD", "ADMIN"]}>
+      <RequireRole
+        anyOf={[
+          "GUARD",
+          "ACCOUNT_OWNER",
+          "PORTFOLIO_MANAGER",
+          "PROPERTY_MANAGER",
+        ]}
+      >
         <GuardCheckPage />
       </RequireRole>
     </RequireAuth>
@@ -491,7 +631,14 @@ const guardVendorsRoute = createRoute({
   path: "/guard/vendors",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["GUARD", "ADMIN"]}>
+      <RequireRole
+        anyOf={[
+          "GUARD",
+          "ACCOUNT_OWNER",
+          "PORTFOLIO_MANAGER",
+          "PROPERTY_MANAGER",
+        ]}
+      >
         <GuardVendorsListPage />
       </RequireRole>
     </RequireAuth>
@@ -504,8 +651,20 @@ const vendorRoute = createRoute({
   path: "/vendor",
   component: () => (
     <RequireAuth>
-      <RequireRole anyOf={["VENDOR", "ADMIN"]}>
+      <RequireRole anyOf={["VENDOR"]}>
         <VendorPage />
+      </RequireRole>
+    </RequireAuth>
+  ),
+});
+
+const tenantRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tenant",
+  component: () => (
+    <RequireAuth>
+      <RequireRole anyOf={["TENANT"]}>
+        <TenantPortalPage />
       </RequireRole>
     </RequireAuth>
   ),
@@ -545,7 +704,9 @@ const routeTree = rootRoute.addChildren([
   registerRoute,
   forgotRoute,
   resetRoute,
+  resetAuthSegmentRoute,
   verifyRoute,
+  verifyAuthSegmentRoute,
   resendRoute,
   profileRoute,
   publicSubmitRoute,
@@ -555,11 +716,16 @@ const routeTree = rootRoute.addChildren([
   adminRequestRoute,
   adminBuildingsRoute,
   adminVendorsRoute,
+  adminVendorDetailRoute,
+  adminTenantsRoute,
+  adminTenantDetailRoute,
   adminRequirementsRoute,
   adminAuditRoute,
+  adminTeamRoute,
   guardCheckRoute,
   guardVendorsRoute,
   vendorRoute,
+  tenantRoute,
   logoutRoute,
   notFoundRoute,
 ]);

@@ -1,21 +1,17 @@
 export interface Requirement {
   id: string;
   buildingId: string;
-  type: string;
-  description: string;
-  minimumAmount?: number;
+  // Simplificado para adaptarse al RequirementTemplate del backend;
+  // propiedades específicas se manejan en los componentes que consumen este tipo.
+  [key: string]: any;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface CreateRequirementDto {
-  type: string;
-  description: string;
-  minimumAmount?: number;
+  [key: string]: any;
 }
 
 export interface UpdateRequirementDto {
-  type?: string;
-  description?: string;
-  minimumAmount?: number;
+  [key: string]: any;
 }

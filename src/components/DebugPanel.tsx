@@ -1,10 +1,12 @@
-import { useAuthRefresh } from "../hooks/useAuthRefresh";
 import { useState } from "react";
+import { useAuthRefresh } from "../hooks/useAuthRefresh";
+import { useApi } from "../hooks/useApi";
 
 export default function DebugPanel() {
   const { isRefreshing, queuedCount, lastRefresh, refreshCount } =
     useAuthRefresh();
   const [isOpen, setIsOpen] = useState(false);
+  const { execute: executeTestCois } = useApi("/cois");
 
   // Solo mostrar en desarrollo
   if (import.meta.env.PROD) return null;
@@ -68,9 +70,9 @@ export default function DebugPanel() {
               onClick={() => {
                 // Simular múltiples requests simultáneos
                 Promise.all([
-                  fetch("/api/cois"),
-                  fetch("/api/cois"),
-                  fetch("/api/cois"),
+                  executeTestCois(),
+                  executeTestCois(),
+                  executeTestCois(),
                 ]).catch(() => {});
               }}
               className="w-full bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs transition-colors"

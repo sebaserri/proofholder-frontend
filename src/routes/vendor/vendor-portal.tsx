@@ -1,5 +1,4 @@
 // src/pages/vendor/VendorPortal.tsx
-import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   AlertCircle,
@@ -7,25 +6,65 @@ import {
   Clock,
   FileText,
   Plus,
+  Shield,
   XCircle,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 import { LoadingOverlay } from "../../components";
-import { fetchApi } from "../../lib/api";
+import { useApi } from "../../hooks/useApi";
 import { COIListItem, COIStatus } from "../../types";
+import {
+  Vendor,
+  VendorAuthorization,
+} from "../../types/vendor.types";
 
 export default function VendorPortal() {
-  // Fetch vendor's COIs - endpoint: GET /cois (filtered by vendor user)
-  const { data: cois = [], isLoading } = useQuery<COIListItem[]>({
-    queryKey: ["vendor-cois"],
-    queryFn: () => fetchApi("/cois"),
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+
+  // Fetch vendor profile - endpoint: GET /vendors/me/profile
+  const {
+    data: profile,
+    loading: loadingProfile,
+    execute: fetchProfile,
+  } = useApi<Vendor>("/vendors/me/profile", {
+    showErrorToast: true,
   });
 
-  if (isLoading) return <LoadingOverlay />;
+  // Fetch vendor authorizations - endpoint: GET /vendors/me/authorizations
+  const {
+    data: authorizations,
+    loading: loadingAuth,
+    execute: fetchAuthorizations,
+  } = useApi<VendorAuthorization[]>("/vendors/me/authorizations", {
+    showErrorToast: true,
+  });
+
+  // Fetch vendor's COIs - endpoint: GET /vendors/me/cois
+  const {
+    data: cois,
+    loading: isLoading,
+    error,
+    execute: fetchCois,
+  } = useApi<COIListItem[]>("/vendors/me/cois", {
+    showErrorToast: true,
+  });
+
+  useEffect(() => {
+    fetchProfile();
+    fetchAuthorizations();
+    fetchCois();
+  }, [fetchProfile, fetchAuthorizations, fetchCois]);
+
+  if (loadingProfile || loadingAuth || isLoading) return <LoadingOverlay />;
+
+  const coiList = cois ?? [];
+  const authList = authorizations ?? [];
 
   // Group COIs by status for better overview
-  const pendingCois = cois.filter((c) => c.status === "PENDING");
-  const approvedCois = cois.filter((c) => c.status === "APPROVED");
-  const rejectedCois = cois.filter((c) => c.status === "REJECTED");
+  const pendingCois = coiList.filter((c) => c.status === "PENDING");
+  const approvedCois = coiList.filter((c) => c.status === "APPROVED");
+  const rejectedCois = coiList.filter((c) => c.status === "REJECTED");
 
   return (
     <div className="space-y-6">
@@ -39,7 +78,10 @@ export default function VendorPortal() {
             View and manage your insurance certificates
           </p>
         </div>
-        <button className="btn btn-primary">
+        <button
+          className="btn btn-primary"
+          onClick={() => setIsUploadOpen(true)}
+        >
           <Plus className="h-4 w-4" />
           Upload New COI
         </button>
@@ -68,7 +110,7 @@ export default function VendorPortal() {
       </div>
 
       {/* COI List */}
-      {cois.length === 0 ? (
+      {coiList.length === 0 ? (
         <EmptyState />
       ) : (
         <div className="space-y-4">
@@ -99,6 +141,45 @@ export default function VendorPortal() {
             </Section>
           )}
         </div>
+      )}
+
+      {/* Authorizations */}
+      <div className="card p-6 space-y-3">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Shield className="h-5 w-5 text-brand" />
+          Building Authorizations
+        </h2>
+        {authList.length === 0 ? (
+          <p className="text-sm text-neutral-500">
+            No building authorizations found for your vendor profile yet.
+          </p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {authList.map((auth) => (
+              <li
+                key={auth.id}
+                className="flex items-center justify-between border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-2"
+              >
+                <div>
+                  <div className="font-medium">{auth.buildingName}</div>
+                  <div className="text-xs text-neutral-500">
+                    {auth.buildingAddress}
+                  </div>
+                </div>
+                <StatusBadge
+                  status={
+                    auth.status as "PENDING" | "APPROVED" | "REJECTED"
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Upload COI Modal */}
+      {isUploadOpen && profile && (
+        <UploadCoiModal onClose={() => setIsUploadOpen(false)} />
       )}
     </div>
   );
@@ -257,6 +338,129 @@ function StatusBadge({ status }: { status: COIStatus }) {
       <Icon className="h-3.5 w-3.5" />
       {status}
     </span>
+  );
+}
+
+// Upload COI modal - uses POST /vendors/upload-coi
+function UploadCoiModal({ onClose }: { onClose: () => void }) {
+  const {
+    execute: uploadCoi,
+    loading,
+  } = useApi("/vendors/upload-coi", {
+    showSuccessToast: true,
+    successMessage: "COI uploaded successfully",
+    showErrorToast: true,
+  });
+
+  const { register, handleSubmit, reset } = useForm<{
+    buildingId: string;
+    expirationDate: string;
+  }>({
+    defaultValues: { buildingId: "", expirationDate: "" },
+  } as any);
+
+  const { data: buildings, execute: fetchBuildings } = useApi<
+    { id: string; name: string }[]
+  >("/buildings", { showErrorToast: true });
+
+  useEffect(() => {
+    fetchBuildings();
+  }, [fetchBuildings]);
+
+  const onSubmit = async (data: { buildingId: string; expirationDate: string }) => {
+    const fileInput = document.getElementById(
+      "coi-file-input"
+    ) as HTMLInputElement | null;
+    const file = fileInput?.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("buildingId", data.buildingId);
+    formData.append("expirationDate", data.expirationDate);
+
+    try {
+      await uploadCoi({
+        method: "POST",
+        body: formData,
+      });
+      reset();
+      onClose();
+    } catch {
+      // handled by useApi
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-neutral-900 rounded-lg shadow-xl w-full max-w-md mx-4">
+        <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-800">
+          <h2 className="text-xl font-semibold">Upload COI</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+          >
+            <XCircle className="h-5 w-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Building *
+            </label>
+            <select
+              {...register("buildingId", { required: true })}
+              className="field"
+            >
+              <option value="">Select building…</option>
+              {(buildings ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Expiration Date *
+            </label>
+            <input
+              type="date"
+              {...register("expirationDate", { required: true })}
+              className="field"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              COI PDF *
+            </label>
+            <input
+              id="coi-file-input"
+              type="file"
+              accept="application/pdf"
+              className="field"
+            />
+          </div>
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-ghost flex-1"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary flex-1"
+              disabled={loading}
+            >
+              {loading ? "Uploading..." : "Upload"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

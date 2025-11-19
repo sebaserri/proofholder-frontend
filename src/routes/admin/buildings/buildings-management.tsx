@@ -1,69 +1,64 @@
 // src/pages/admin/BuildingsManagement.tsx
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building as BuildingIcon, Edit2, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { LoadingOverlay } from "../../../components";
-import { fetchApi } from "../../../lib/api";
+import { useApi } from "../../../hooks/useApi";
+import { useSessionQuery } from "../../../state/session";
 import { Building, CreateBuildingDto, UpdateBuildingDto } from "../../../types";
 
 export default function BuildingsManagement() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingBuilding, setEditingBuilding] = useState<Building | null>(null);
-  const queryClient = useQueryClient();
+  const { data: me } = useSessionQuery({ enabled: true });
+
+  const canManageBuildings =
+    me?.role === "ACCOUNT_OWNER" || me?.role === "PORTFOLIO_MANAGER";
 
   // Fetch buildings - endpoint: GET /buildings
-  const { data: buildings = [], isLoading } = useQuery<Building[]>({
-    queryKey: ["buildings"],
-    queryFn: () => fetchApi("/buildings"),
+  const {
+    data: buildings,
+    loading: isLoading,
+    execute: fetchBuildings,
+  } = useApi<Building[]>("/buildings", {
+    showErrorToast: true,
   });
 
-  // Create building mutation - endpoint: POST /buildings
-  const createMutation = useMutation({
-    mutationFn: (data: CreateBuildingDto | UpdateBuildingDto) =>
-      fetchApi("/buildings", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["buildings"] });
-      setIsCreateModalOpen(false);
-      console.log("✓ Building created successfully");
-    },
-    onError: (error) => {
-      console.error("✗ Failed to create building:", error);
-    },
+  // Create building - endpoint: POST /buildings
+  const {
+    loading: isCreatingBuilding,
+    execute: createBuilding,
+  } = useApi("/buildings", {
+    showSuccessToast: true,
+    successMessage: "Building created successfully",
+    showErrorToast: true,
   });
 
-  // Update building mutation - endpoint: PATCH /buildings/:id
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateBuildingDto }) =>
-      fetchApi(`/buildings/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["buildings"] });
-      setEditingBuilding(null);
-      console.log("✓ Building updated successfully");
-    },
-    onError: (error) => {
-      console.error("✗ Failed to update building:", error);
-    },
+  // Update building - endpoint: PATCH /buildings/:id
+  const {
+    loading: isUpdatingBuilding,
+    execute: updateBuilding,
+  } = useApi("/buildings", {
+    showSuccessToast: true,
+    successMessage: "Building updated successfully",
+    showErrorToast: true,
   });
 
-  // Delete building mutation - endpoint: DELETE /buildings/:id
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) =>
-      fetchApi(`/buildings/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["buildings"] });
-      console.log("✓ Building deleted successfully");
-    },
-    onError: (error) => {
-      console.error("✗ Failed to delete building:", error);
-    },
+  // Delete building - endpoint: DELETE /buildings/:id
+  const {
+    loading: isDeletingBuilding,
+    execute: deleteBuilding,
+  } = useApi("/buildings", {
+    showSuccessToast: true,
+    successMessage: "Building deleted successfully",
+    showErrorToast: true,
   });
+
+  useEffect(() => {
+    fetchBuildings();
+  }, [fetchBuildings]);
+
+  const buildingList = buildings ?? [];
 
   const handleDelete = async (building: Building) => {
     if (
@@ -71,7 +66,16 @@ export default function BuildingsManagement() {
         `Are you sure you want to delete "${building.name}"? This action cannot be undone.`
       )
     ) {
-      deleteMutation.mutate(building.id);
+      try {
+        await deleteBuilding({
+          endpoint: `/buildings/${building.id}`,
+          method: "DELETE",
+        });
+        await fetchBuildings();
+        console.log("✓ Building deleted successfully");
+      } catch (error) {
+        console.error("✗ Failed to delete building:", error);
+      }
     }
   };
 
@@ -89,26 +93,31 @@ export default function BuildingsManagement() {
             Create and manage buildings in your portfolio
           </p>
         </div>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="btn btn-primary"
-        >
-          <Plus className="h-4 w-4" />
-          Add Building
-        </button>
+        {canManageBuildings && (
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="btn btn-primary"
+          >
+            <Plus className="h-4 w-4" />
+            Add Building
+          </button>
+        )}
       </div>
 
       {/* Buildings Grid */}
-      {buildings.length === 0 ? (
-        <EmptyState onCreateClick={() => setIsCreateModalOpen(true)} />
+      {buildingList.length === 0 ? (
+        <EmptyState
+          onCreateClick={() => setIsCreateModalOpen(true)}
+          canManageBuildings={canManageBuildings}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {buildings.map((building) => (
+          {buildingList.map((building) => (
             <BuildingCard
               key={building.id}
               building={building}
-              onEdit={setEditingBuilding}
-              onDelete={handleDelete}
+              onEdit={canManageBuildings ? setEditingBuilding : undefined}
+              onDelete={canManageBuildings ? handleDelete : undefined}
             />
           ))}
         </div>
@@ -119,8 +128,20 @@ export default function BuildingsManagement() {
         <BuildingModal
           title="Create New Building"
           onClose={() => setIsCreateModalOpen(false)}
-          onSubmit={(data) => createMutation.mutate(data)}
-          isSubmitting={createMutation.isPending}
+          onSubmit={async (data) => {
+            try {
+              await createBuilding({
+                method: "POST",
+                body: JSON.stringify(data),
+              });
+              await fetchBuildings();
+              setIsCreateModalOpen(false);
+              console.log("✓ Building created successfully");
+            } catch (error) {
+              console.error("✗ Failed to create building:", error);
+            }
+          }}
+          isSubmitting={isCreatingBuilding}
         />
       )}
 
@@ -130,10 +151,21 @@ export default function BuildingsManagement() {
           title="Edit Building"
           building={editingBuilding}
           onClose={() => setEditingBuilding(null)}
-          onSubmit={(data) =>
-            updateMutation.mutate({ id: editingBuilding.id, data })
-          }
-          isSubmitting={updateMutation.isPending}
+          onSubmit={async (data) => {
+            try {
+              await updateBuilding({
+                endpoint: `/buildings/${editingBuilding.id}`,
+                method: "PATCH",
+                body: JSON.stringify(data),
+              });
+              await fetchBuildings();
+              setEditingBuilding(null);
+              console.log("✓ Building updated successfully");
+            } catch (error) {
+              console.error("✗ Failed to update building:", error);
+            }
+          }}
+          isSubmitting={isUpdatingBuilding || isDeletingBuilding}
         />
       )}
     </div>
@@ -147,8 +179,8 @@ function BuildingCard({
   onDelete,
 }: {
   building: Building;
-  onEdit: (building: Building) => void;
-  onDelete: (building: Building) => void;
+  onEdit?: (building: Building) => void;
+  onDelete?: (building: Building) => void;
 }) {
   return (
     <div className="card p-6 hover:shadow-lg transition-shadow">
@@ -156,22 +188,24 @@ function BuildingCard({
         <div className="p-3 bg-brand/10 rounded-lg">
           <BuildingIcon className="h-6 w-6 text-brand" />
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => onEdit(building)}
-            className="p-2 text-neutral-600 hover:text-brand hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-            title="Edit building"
-          >
-            <Edit2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => onDelete(building)}
-            className="p-2 text-neutral-600 hover:text-red-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-            title="Delete building"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        {onEdit && onDelete && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => onEdit(building)}
+              className="p-2 text-neutral-600 hover:text-brand hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+              title="Edit building"
+            >
+              <Edit2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => onDelete(building)}
+              className="p-2 text-neutral-600 hover:text-red-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
+              title="Delete building"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       <h3 className="text-lg font-semibold mb-2">{building.name}</h3>
@@ -291,7 +325,13 @@ function BuildingModal({
 }
 
 // Empty State Component
-function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
+function EmptyState({
+  onCreateClick,
+  canManageBuildings,
+}: {
+  onCreateClick: () => void;
+  canManageBuildings: boolean;
+}) {
   return (
     <div className="card p-12 text-center">
       <BuildingIcon className="mx-auto h-16 w-16 text-neutral-400 mb-4" />
@@ -300,10 +340,12 @@ function EmptyState({ onCreateClick }: { onCreateClick: () => void }) {
         Start by adding your first building to manage certificates of insurance
         for your properties.
       </p>
-      <button onClick={onCreateClick} className="btn btn-primary">
-        <Plus className="h-4 w-4" />
-        Add Your First Building
-      </button>
+      {canManageBuildings && (
+        <button onClick={onCreateClick} className="btn btn-primary">
+          <Plus className="h-4 w-4" />
+          Add Your First Building
+        </button>
+      )}
     </div>
   );
 }

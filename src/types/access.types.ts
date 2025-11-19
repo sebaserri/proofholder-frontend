@@ -1,12 +1,13 @@
 // src/types/access.types.ts
 export interface AccessCheckResult {
-  status: "APTO" | "NO_APTO";
-  reasons?: string[];
-  coi?: {
-    id: string;
-    expirationDate: string;
-    status: string;
-  };
+  isApproved: boolean;
+  reason: string;
+  coiId?: string | null;
+  status?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+  vendorId?: string;
+  buildingId?: string;
 }
 
 export interface AccessCheckParams {

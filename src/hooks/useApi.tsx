@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { fetchApi } from "../lib/api";
 import { useToast } from "../ui/toast/ToastProvider";
 
-interface UseApiOptions {
+export interface UseApiOptions {
   showSuccessToast?: boolean;
   showErrorToast?: boolean;
   successMessage?: string;
@@ -20,14 +20,17 @@ export function useApi<T = any>(endpoint: string, options: UseApiOptions = {}) {
       setError(null);
 
       try {
-        const result = await fetchApi<T>(endpoint, fetchOptions);
+        const { endpoint: overrideEndpoint, ...restOptions } = fetchOptions || {};
+        const targetEndpoint = overrideEndpoint ?? endpoint;
+
+        const result = await fetchApi<T>(targetEndpoint, restOptions);
         setData(result);
 
         if (options.showSuccessToast) {
           show({
             variant: "success",
             title: "Done!",
-            description: options.successMessage || "Operación exitosa",
+            description: options.successMessage || "Success!",
           });
         }
 
@@ -40,7 +43,7 @@ export function useApi<T = any>(endpoint: string, options: UseApiOptions = {}) {
           show({
             variant: "error",
             title: "Error!",
-            description: error.message || "Error al realizar la operación",
+            description: error.message || "Unexpected Error!",
           });
         }
 

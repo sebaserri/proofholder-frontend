@@ -1,5 +1,4 @@
 // src/pages/admin/RequirementsManagement.tsx
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -10,99 +9,64 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { LoadingOverlay } from "../../components";
-import { fetchApi } from "../../lib/api";
+import { useApi } from "../../hooks/useApi";
 import { Building } from "../../types";
-import {
-  CreateRequirementDto,
-  Requirement,
-  UpdateRequirementDto,
-} from "../../types/requirements.types";
+import { Requirement } from "../../types/requirements.types";
 
 export default function RequirementsManagement() {
   const { id } = useParams({ from: "/admin/buildings/$id/requirements" });
   const navigate = useNavigate();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [editingRequirement, setEditingRequirement] =
-    useState<Requirement | null>(null);
-  const queryClient = useQueryClient();
 
   // Fetch building - endpoint: GET /buildings/:id
-  const { data: building, isLoading: buildingLoading } = useQuery<Building>({
-    queryKey: ["building", id],
-    queryFn: () => fetchApi(`/buildings/${id}`),
+  const {
+    data: building,
+    loading: buildingLoading,
+    execute: fetchBuilding,
+  } = useApi<Building>(`/buildings/${id}`, {
+    showErrorToast: true,
   });
 
   // Fetch requirements - endpoint: GET /buildings/:id/requirements
-  const { data: requirements = [], isLoading: requirementsLoading } = useQuery<
-    Requirement[]
-  >({
-    queryKey: ["requirements", id],
-    queryFn: () => fetchApi(`/buildings/${id}/requirements`),
+  // El backend ahora devuelve una única plantilla activa por building.
+  const {
+    data: requirement,
+    loading: requirementsLoading,
+    execute: fetchRequirement,
+  } = useApi<Requirement | null>(`/buildings/${id}/requirements`, {
+    showErrorToast: true,
   });
 
-  // Create requirement mutation - endpoint: POST /buildings/:id/requirements
-  const createMutation = useMutation({
-    mutationFn: (data: CreateRequirementDto | UpdateRequirementDto) =>
-      fetchApi(`/buildings/${id}/requirements`, {
+  // Create requirement - endpoint: POST /buildings/:id/requirements
+  const {
+    loading: creatingRequirement,
+    execute: createRequirement,
+  } = useApi(`/buildings/${id}/requirements`, {
+    showSuccessToast: true,
+    successMessage: "Requirement created successfully",
+    showErrorToast: true,
+  });
+
+  useEffect(() => {
+    if (!id) return;
+    fetchBuilding();
+    fetchRequirement();
+  }, [id, fetchBuilding, fetchRequirement]);
+
+  const handleCreateRequirement = async (data: any) => {
+    try {
+      await createRequirement({
         method: "POST",
         body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["requirements", id] });
+      });
+      await fetchRequirement();
       setIsCreateModalOpen(false);
       console.log("✓ Requirement created successfully");
-    },
-    onError: (error) => {
+    } catch (error) {
       console.error("✗ Failed to create requirement:", error);
-    },
-  });
-
-  // Update requirement mutation - endpoint: PATCH /requirements/:id
-  const updateMutation = useMutation({
-    mutationFn: ({
-      reqId,
-      data,
-    }: {
-      reqId: string;
-      data: UpdateRequirementDto;
-    }) =>
-      fetchApi(`/requirements/${reqId}`, {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["requirements", id] });
-      setEditingRequirement(null);
-      console.log("✓ Requirement updated successfully");
-    },
-    onError: (error) => {
-      console.error("✗ Failed to update requirement:", error);
-    },
-  });
-
-  // Delete requirement mutation - endpoint: DELETE /requirements/:id
-  const deleteMutation = useMutation({
-    mutationFn: (reqId: string) =>
-      fetchApi(`/requirements/${reqId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["requirements", id] });
-      console.log("✓ Requirement deleted successfully");
-    },
-    onError: (error) => {
-      console.error("✗ Failed to delete requirement:", error);
-    },
-  });
-
-  const handleDelete = async (requirement: Requirement) => {
-    if (
-      window.confirm(
-        `Are you sure you want to delete this requirement? Vendors will no longer need to meet "${requirement.type}".`
-      )
-    ) {
-      deleteMutation.mutate(requirement.id);
     }
   };
 
@@ -163,18 +127,11 @@ export default function RequirementsManagement() {
       </div>
 
       {/* Requirements List */}
-      {requirements.length === 0 ? (
+      {!requirement ? (
         <EmptyState onCreateClick={() => setIsCreateModalOpen(true)} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {requirements.map((req) => (
-            <RequirementCard
-              key={req.id}
-              requirement={req}
-              onEdit={setEditingRequirement}
-              onDelete={handleDelete}
-            />
-          ))}
+          <RequirementCard requirement={requirement} />
         </div>
       )}
 
@@ -183,21 +140,8 @@ export default function RequirementsManagement() {
         <RequirementModal
           title="Create New Requirement"
           onClose={() => setIsCreateModalOpen(false)}
-          onSubmit={(data) => createMutation.mutate(data)}
-          isSubmitting={createMutation.isPending}
-        />
-      )}
-
-      {/* Edit Requirement Modal */}
-      {editingRequirement && (
-        <RequirementModal
-          title="Edit Requirement"
-          requirement={editingRequirement}
-          onClose={() => setEditingRequirement(null)}
-          onSubmit={(data) =>
-            updateMutation.mutate({ reqId: editingRequirement.id, data })
-          }
-          isSubmitting={updateMutation.isPending}
+          onSubmit={handleCreateRequirement}
+          isSubmitting={creatingRequirement}
         />
       )}
     </div>
@@ -205,37 +149,14 @@ export default function RequirementsManagement() {
 }
 
 // Requirement Card Component
-function RequirementCard({
-  requirement,
-  onEdit,
-  onDelete,
-}: {
-  requirement: Requirement;
-  onEdit: (req: Requirement) => void;
-  onDelete: (req: Requirement) => void;
-}) {
+function RequirementCard({ requirement }: { requirement: Requirement }) {
   return (
     <div className="card p-6 hover:shadow-lg transition-shadow">
       <div className="flex items-start justify-between mb-4">
         <div className="p-3 bg-brand/10 rounded-lg">
           <Shield className="h-5 w-5 text-brand" />
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => onEdit(requirement)}
-            className="p-2 text-neutral-600 hover:text-brand hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-            title="Edit requirement"
-          >
-            <Edit2 className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => onDelete(requirement)}
-            className="p-2 text-neutral-600 hover:text-red-600 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-colors"
-            title="Delete requirement"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        <div />
       </div>
 
       <h3 className="text-lg font-semibold mb-2">{requirement.type}</h3>

@@ -1,12 +1,11 @@
 // src/pages/coi/public-submit.tsx
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { Loader2, Upload } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { fetchApi } from "../../lib/api";
+import { useApi } from "../../hooks/useApi";
 import { useToast } from "../../ui/toast/ToastProvider";
 
 // Validation schema
@@ -26,17 +25,36 @@ const coiSchema = z.object({
 
 type CoiFormData = z.infer<typeof coiSchema>;
 
+interface RequirementTemplateMeta {
+  // Campos antiguos
+  generalLiabMin?: number;
+  autoLiabMin?: number;
+  umbrellaMin?: number;
+  workersCompRequired?: boolean;
+  additionalInsuredText?: string;
+  certificateHolderText?: string;
+
+  // Campos nuevos del backend (RequirementTemplate)
+  glRequired?: boolean;
+  glMinOccurrence?: number;
+  glMinAggregate?: number;
+  autoRequired?: boolean;
+  autoMinCombined?: number;
+  umbrellaRequired?: boolean;
+  umbrellaMinLimit?: number;
+  wcRequired?: boolean;
+  additionalInsuredRequired?: boolean;
+  waiverSubrogationRequired?: boolean;
+  primaryNonContribRequired?: boolean;
+  noticeOfCancelMin?: number;
+  holderName?: string;
+  holderAddress?: string;
+}
+
 interface RequestMeta {
   vendor: { id: string; legalName: string };
   building: { id: string; name: string; address: string };
-  requirements?: {
-    generalLiabMin?: number;
-    autoLiabMin?: number;
-    umbrellaMin?: number;
-    workersCompRequired: boolean;
-    additionalInsuredText?: string;
-    certificateHolderText: string;
-  };
+  requirements?: RequirementTemplateMeta;
   expiresAt: string;
 }
 
@@ -48,12 +66,34 @@ export default function PublicSubmitPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // Fetch request meta
-  const { data: meta, isLoading } = useQuery<RequestMeta>({
-    queryKey: ["coi-request", token],
-    queryFn: () => fetchApi(`/coi/requests/${token}`),
-    enabled: !!token,
-    retry: false,
+  const {
+    data: meta,
+    loading: isLoading,
+    execute: fetchMeta,
+  } = useApi<RequestMeta>(`/coi/requests/${token}`, {
+    showErrorToast: true,
   });
+
+  // Presign + submit endpoints
+  const { execute: getPresign } = useApi<{
+    url: string;
+    fields: Record<string, string>;
+  }>(`/coi/requests/${token}/presign`, {
+    showErrorToast: true,
+  });
+
+  const { execute: submitCoi } = useApi(`/coi/requests/${token}/submit`, {
+    showSuccessToast: true,
+    successMessage: "Certificate submitted!",
+    showErrorToast: true,
+  });
+
+  useEffect(() => {
+    if (!token) return;
+    fetchMeta().catch(() => {
+      // Error already handled by useApi
+    });
+  }, [token, fetchMeta]);
 
   const {
     register,
@@ -80,10 +120,7 @@ export default function PublicSubmitPage() {
     setSubmitting(true);
     try {
       // Step 1: Get presigned URL
-      const presignData = await fetchApi<{
-        url: string;
-        fields: Record<string, string>;
-      }>(`/coi/requests/${token}/presign`, { method: "GET" });
+      const presignData = await getPresign({ method: "GET" });
 
       // Step 2: Upload to S3/MinIO
       const formData = new FormData();
@@ -100,7 +137,7 @@ export default function PublicSubmitPage() {
       const fileUrl = `${presignData.url}/${presignData.fields.key}`;
 
       // Step 3: Submit COI
-      await fetchApi(`/coi/requests/${token}/submit`, {
+      await submitCoi({
         method: "POST",
         body: {
           ...data,
@@ -170,24 +207,37 @@ export default function PublicSubmitPage() {
             Required Coverage:
           </h3>
           <ul className="space-y-2 text-sm text-sky-800 dark:text-sky-200">
-            {requirements.generalLiabMin && (
+            {(requirements.generalLiabMin ?? requirements.glMinOccurrence) && (
               <li>
                 • General Liability: $
-                {requirements.generalLiabMin.toLocaleString()} minimum
-              </li>
-            )}
-            {requirements.autoLiabMin && (
-              <li>
-                • Auto Liability: ${requirements.autoLiabMin.toLocaleString()}{" "}
+                {(
+                  requirements.generalLiabMin ??
+                  requirements.glMinOccurrence!
+                ).toLocaleString()}{" "}
                 minimum
               </li>
             )}
-            {requirements.umbrellaMin && (
+            {(requirements.autoLiabMin ?? requirements.autoMinCombined) && (
               <li>
-                • Umbrella: ${requirements.umbrellaMin.toLocaleString()} minimum
+                • Auto Liability: $
+                {(
+                  requirements.autoLiabMin ??
+                  requirements.autoMinCombined!
+                ).toLocaleString()}{" "}
+                minimum
               </li>
             )}
-            {requirements.workersCompRequired && (
+            {(requirements.umbrellaMin ?? requirements.umbrellaMinLimit) && (
+              <li>
+                • Umbrella: $
+                {(
+                  requirements.umbrellaMin ??
+                  requirements.umbrellaMinLimit!
+                ).toLocaleString()}{" "}
+                minimum
+              </li>
+            )}
+            {(requirements.workersCompRequired ?? requirements.wcRequired) && (
               <li>• Workers Compensation: Required</li>
             )}
           </ul>

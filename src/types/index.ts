@@ -8,3 +8,4 @@ export * from "./sms.types";
 export * from "./system.types";
 export * from "./user.types";
 export * from "./vendor.types";
+export * from "./tenant.types";

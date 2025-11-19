@@ -57,6 +57,7 @@ export interface COIListItem {
   workersComp?: boolean;
   createdAt: string;
   uploadedAt?: string;
+  files?: COIFile[];
 }
 
 export interface COIReviewPayload {

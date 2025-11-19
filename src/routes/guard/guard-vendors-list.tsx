@@ -1,12 +1,22 @@
 // src/pages/guard/GuardVendorsList.tsx
-import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle, Search, Users, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LoadingOverlay } from "../../components";
-import { fetchApi } from "../../lib/api";
-import { Building, COIStatus } from "../../types";
+import { useApi } from "../../hooks/useApi";
+import { Building } from "../../types";
 
-// Extended vendor type for guard view
+// Resumen por vendor para un edificio (basado en AccessService.listByBuilding)
+interface VendorAccessSummary {
+  vendorId: string;
+  vendorName: string;
+  isApproved: boolean;
+  reason: string;
+  coiId?: string | null;
+  status?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+}
+
 interface VendorWithAccess {
   id: string;
   legalName: string;
@@ -15,7 +25,7 @@ interface VendorWithAccess {
   buildings: {
     buildingId: string;
     buildingName: string;
-    coiStatus: COIStatus | null;
+    coiStatus: "APPROVED" | "REJECTED" | "MISSING" | null;
     expirationDate?: string;
   }[];
 }
@@ -24,18 +34,83 @@ export default function GuardVendorsList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [buildingFilter, setBuildingFilter] = useState<string>("");
 
-  // Fetch vendors with COI status - endpoint: GET /vendors/guard-view
-  const { data: vendors = [], isLoading } = useQuery<VendorWithAccess[]>({
-    queryKey: ["vendors-guard"],
-    queryFn: () => fetchApi("/vendors/guard-view"),
-    refetchInterval: 30000, // Refresh every 30 seconds
+  // Fetch buildings for filter
+  const {
+    data: buildings,
+    loading: loadingBuildings,
+    execute: fetchBuildings,
+  } = useApi<Building[]>("/buildings", {
+    showErrorToast: true,
   });
 
-  // Fetch buildings for filter
-  const { data: buildings = [] } = useQuery<Building[]>({
-    queryKey: ["buildings"],
-    queryFn: () => fetchApi("/buildings"),
-  });
+  // Fetch vendor summaries for selected building - endpoint: GET /access/vendors?buildingId=...
+  const {
+    data: accessSummaries,
+    loading: loadingAccessSummaries,
+    execute: fetchAccessSummaries,
+  } = useApi<VendorAccessSummary[]>(
+    buildingFilter
+      ? `/access/vendors?buildingId=${encodeURIComponent(buildingFilter)}`
+      : "",
+    {
+      showErrorToast: true,
+    }
+  );
+
+  useEffect(() => {
+    fetchBuildings();
+  }, [fetchBuildings]);
+
+  // Load/refresh vendor summaries when building changes
+  useEffect(() => {
+    if (!buildingFilter) return;
+
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        await fetchAccessSummaries();
+      } catch {
+        // Error already handled by useApi
+      }
+    };
+
+    load();
+    const intervalId = setInterval(() => {
+      if (!cancelled) {
+        load();
+      }
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [buildingFilter, fetchAccessSummaries]);
+
+  const buildingList = buildings ?? [];
+
+  // Adapt backend summaries to view model
+  const vendors: VendorWithAccess[] = useMemo(() => {
+    if (!accessSummaries || !buildingFilter || buildingList.length === 0)
+      return [];
+    const buildingName =
+      buildingList.find((b) => b.id === buildingFilter)?.name ?? "Building";
+    return accessSummaries.map((s) => ({
+      id: s.vendorId,
+      legalName: s.vendorName,
+      contactEmail: "",
+      contactPhone: undefined,
+      buildings: [
+        {
+          buildingId: buildingFilter,
+          buildingName,
+          coiStatus: s.isApproved ? "APPROVED" : "REJECTED",
+          expirationDate: s.expirationDate,
+        },
+      ],
+    }));
+  }, [accessSummaries, buildingFilter, buildingList]);
 
   // Filter vendors
   const filteredVendors = useMemo(() => {
@@ -55,7 +130,8 @@ export default function GuardVendorsList() {
     });
   }, [vendors, searchTerm, buildingFilter]);
 
-  if (isLoading) return <LoadingOverlay />;
+  if (loadingBuildings || (buildingFilter && loadingAccessSummaries))
+    return <LoadingOverlay />;
 
   return (
     <div className="space-y-6">
@@ -90,7 +166,7 @@ export default function GuardVendorsList() {
           className="field w-full sm:w-64"
         >
           <option value="">All Buildings</option>
-          {buildings.map((b) => (
+          {buildingList.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
             </option>
@@ -108,23 +184,19 @@ export default function GuardVendorsList() {
         />
         <StatCard
           label="With Active COI"
-          value={
-            filteredVendors.filter((v) =>
-              v.buildings.some((b) => b.coiStatus === "APPROVED")
-            ).length
-          }
+          value={filteredVendors.filter((v) =>
+            v.buildings.some((b) => b.coiStatus === "APPROVED")
+          ).length}
           icon={CheckCircle}
           color="green"
         />
         <StatCard
           label="Expired/Missing"
-          value={
-            filteredVendors.filter(
-              (v) =>
-                !v.buildings.some((b) => b.coiStatus === "APPROVED") &&
-                v.buildings.length > 0
-            ).length
-          }
+          value={filteredVendors.filter(
+            (v) =>
+              !v.buildings.some((b) => b.coiStatus === "APPROVED") &&
+              v.buildings.length > 0
+          ).length}
           icon={XCircle}
           color="red"
         />
@@ -207,9 +279,8 @@ function VendorRow({ vendor }: { vendor: VendorWithAccess }) {
   const hasAnyApprovedCOI = vendor.buildings.some(
     (b) => b.coiStatus === "APPROVED"
   );
-  const hasExpiredOrMissing = vendor.buildings.some(
-    (b) => b.coiStatus === "REJECTED" || b.coiStatus === null
-  );
+  const hasExpiredOrMissing =
+    vendor.buildings.length > 0 && !hasAnyApprovedCOI;
 
   return (
     <tr className="hover:bg-neutral-50 dark:hover:bg-neutral-900/50">

@@ -1,5 +1,4 @@
 // src/pages/admin/AuditLogsViewer.tsx
-import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   AlertCircle,
@@ -11,9 +10,9 @@ import {
   Search,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { LoadingOverlay } from "../../components";
-import { fetchApi } from "../../lib/api";
+import { useApi } from "../../hooks/useApi";
 import { AuditListResponse, AuditLogItem } from "../../types";
 
 export default function AuditLogsViewer() {
@@ -26,27 +25,37 @@ export default function AuditLogsViewer() {
   const limit = 25;
 
   // Fetch audit logs - endpoint: GET /audit/logs
-  const { data, isLoading } = useQuery<AuditListResponse>({
-    queryKey: [
-      "audit-logs",
-      actionFilter,
-      entityFilter,
-      dateFrom,
-      dateTo,
-      page,
-    ],
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (actionFilter) params.set("action", actionFilter);
-      if (entityFilter) params.set("entity", entityFilter);
-      if (dateFrom) params.set("from", new Date(dateFrom).toISOString());
-      if (dateTo) params.set("to", new Date(dateTo).toISOString());
-      params.set("page", page.toString());
-      params.set("limit", limit.toString());
-      params.set("sort", "desc"); // Most recent first
-      return fetchApi(`/audit/logs?${params}`);
-    },
+  const {
+    data,
+    loading: isLoading,
+    execute: fetchAuditLogs,
+  } = useApi<AuditListResponse>("/audit/logs", {
+    showErrorToast: true,
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (actionFilter) params.set("action", actionFilter);
+    if (entityFilter) params.set("entity", entityFilter);
+    if (dateFrom) params.set("from", new Date(dateFrom).toISOString());
+    if (dateTo) params.set("to", new Date(dateTo).toISOString());
+    params.set("page", page.toString());
+    params.set("limit", limit.toString());
+    params.set("sort", "desc"); // Most recent first
+
+    fetchAuditLogs({ endpoint: `/audit/logs?${params.toString()}` }).catch(
+      () => {
+        // Error already handled by useApi
+      }
+    );
+  }, [
+    actionFilter,
+    entityFilter,
+    dateFrom,
+    dateTo,
+    page,
+    fetchAuditLogs,
+  ]);
 
   const logs = data?.items || [];
   const total = data?.total || 0;

@@ -13,12 +13,21 @@ export default function ProfilePage() {
   if (isLoading) return <LoadingOverlay />;
   if (!me) return null;
 
-  const roleColors = {
-    ADMIN:
+  const roleColors: Record<string, string> = {
+    ACCOUNT_OWNER:
       "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200",
-    VENDOR: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200",
+    PORTFOLIO_MANAGER:
+      "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200",
+    PROPERTY_MANAGER:
+      "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200",
+    VENDOR:
+      "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200",
     GUARD:
       "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200",
+    BUILDING_OWNER:
+      "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200",
+    TENANT:
+      "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200",
   };
 
   return (
@@ -90,7 +99,9 @@ export default function ProfilePage() {
       <Card className="p-6">
         <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
         <div className="space-y-3">
-          {me.role === "ADMIN" && (
+          {(me.role === "ACCOUNT_OWNER" ||
+            me.role === "PORTFOLIO_MANAGER" ||
+            me.role === "PROPERTY_MANAGER") && (
             <button
               onClick={() => navigate({ to: "/admin/cois" })}
               className="w-full btn btn-ghost justify-start"
@@ -115,6 +126,15 @@ export default function ProfilePage() {
             >
               <Building2 className="h-4 w-4" />
               Go to Vendor Portal
+            </button>
+          )}
+          {me.role === "TENANT" && (
+            <button
+              onClick={() => navigate({ to: "/tenant" })}
+              className="w-full btn btn-ghost justify-start"
+            >
+              <Building2 className="h-4 w-4" />
+              Go to Tenant Portal
             </button>
           )}
           <button

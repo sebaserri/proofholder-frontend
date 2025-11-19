@@ -1,8 +1,8 @@
 // src/components/OcrExtractionButton.tsx
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle, FileSearch, Loader2 } from "lucide-react";
 import { useState } from "react";
-import { fetchApi } from "../lib/api";
+import { useApi } from "../hooks/useApi";
 import type {
   ApplyOcrPayload,
   ExtractedField,
@@ -24,13 +24,33 @@ export default function OcrExtractionButton({
   const queryClient = useQueryClient();
 
   // Extract OCR data - ENDPOINT CORREGIDO: POST /extract/coi/:id
-  const extractMutation = useMutation({
-    mutationFn: () => fetchApi(`/extract/coi/${coiId}`, { method: "POST" }),
-    onSuccess: (data: OcrExtractionResult) => {
+  const {
+    loading: extracting,
+    execute: executeExtract,
+  } = useApi<OcrExtractionResult>(`/extract/coi/${coiId}`, {
+    showErrorToast: true,
+  });
+
+  // Apply extracted data - ENDPOINT CORREGIDO: PATCH /extract/coi/:id/apply
+  const {
+    loading: applying,
+    execute: executeApply,
+  } = useApi(`/extract/coi/${coiId}/apply`, {
+    showSuccessToast: true,
+    successMessage: "OCR data applied successfully",
+    showErrorToast: true,
+  });
+
+  const handleExtract = async () => {
+    setIsOpen(true);
+    setResult(null);
+    setSelectedFields(new Set());
+    try {
+      const data = await executeExtract({ method: "POST" });
       setResult(data);
       // Auto-seleccionar campos con alta confianza (> 0.7)
       const highConfidenceFields = new Set<string>();
-      Object.entries(data).forEach(([key, value]) => {
+      Object.entries(data || {}).forEach(([key, value]) => {
         if (value && typeof value === "object" && "confidence" in value) {
           const field = value as ExtractedField;
           if (field.confidence > 0.7) {
@@ -39,42 +59,17 @@ export default function OcrExtractionButton({
         }
       });
       setSelectedFields(highConfidenceFields);
-      onSuccess?.(data);
+      if (data) {
+        onSuccess?.(data);
+      }
       console.log("✓ OCR extraction successful");
-    },
-    onError: (error) => {
+    } catch (error) {
       console.error("✗ OCR extraction failed:", error);
-      setResult({ confidence: 0 });
-    },
-  });
-
-  // Apply extracted data - ENDPOINT CORREGIDO: PATCH /extract/coi/:id/apply
-  const applyMutation = useMutation({
-    mutationFn: (payload: ApplyOcrPayload) =>
-      fetchApi(`/extract/coi/${coiId}/apply`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["coi", coiId] });
-      setIsOpen(false);
-      setResult(null);
-      setSelectedFields(new Set());
-      console.log("✓ OCR data applied successfully");
-    },
-    onError: (error) => {
-      console.error("✗ Failed to apply OCR data:", error);
-    },
-  });
-
-  const handleExtract = () => {
-    setIsOpen(true);
-    setResult(null);
-    setSelectedFields(new Set());
-    extractMutation.mutate();
+      setResult({ confidence: 0 } as any);
+    }
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     if (!result) return;
 
     const payload: ApplyOcrPayload = {};
@@ -89,7 +84,19 @@ export default function OcrExtractionButton({
       }
     });
 
-    applyMutation.mutate(payload);
+    try {
+      await executeApply({
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      queryClient.invalidateQueries({ queryKey: ["coi", coiId] });
+      setIsOpen(false);
+      setResult(null);
+      setSelectedFields(new Set());
+      console.log("✓ OCR data applied successfully");
+    } catch (error) {
+      console.error("✗ Failed to apply OCR data:", error);
+    }
   };
 
   const toggleField = (fieldName: string) => {
@@ -121,10 +128,10 @@ export default function OcrExtractionButton({
       {/* Extract Button */}
       <button
         onClick={handleExtract}
-        disabled={extractMutation.isPending}
+        disabled={extracting}
         className="btn btn-ghost"
       >
-        {extractMutation.isPending ? (
+        {extracting ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
             Extracting...
@@ -164,7 +171,7 @@ export default function OcrExtractionButton({
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              {extractMutation.isPending ? (
+              {extracting ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="h-12 w-12 text-brand animate-spin mb-4" />
                   <p className="text-sm text-neutral-600 dark:text-neutral-400">
@@ -418,7 +425,7 @@ export default function OcrExtractionButton({
               <button
                 onClick={() => setIsOpen(false)}
                 className="btn btn-ghost flex-1"
-                disabled={applyMutation.isPending}
+                disabled={applying}
               >
                 Cancel
               </button>
@@ -426,11 +433,9 @@ export default function OcrExtractionButton({
                 <button
                   onClick={handleApply}
                   className="btn btn-primary flex-1"
-                  disabled={
-                    applyMutation.isPending || selectedFields.size === 0
-                  }
+                  disabled={applying || selectedFields.size === 0}
                 >
-                  {applyMutation.isPending ? (
+                  {applying ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Applying...

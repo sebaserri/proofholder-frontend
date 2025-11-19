@@ -12,6 +12,11 @@ interface HeaderProps {
 }
 
 export default function Header({ user, onLogout }: HeaderProps) {
+  const isManagement =
+    user?.role === "ACCOUNT_OWNER" ||
+    user?.role === "PORTFOLIO_MANAGER" ||
+    user?.role === "PROPERTY_MANAGER";
+
   return (
     <header className="fixed top-0 w-full bg-white/80 backdrop-blur-xl border-b border-blue-100/50 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -22,7 +27,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
           {/* Navigation */}
           {user ? (
             <nav className="hidden md:flex items-center space-x-8">
-              {user.role === "ADMIN" && (
+              {isManagement && (
                 <>
                   <Link
                     to="/admin/cois"
@@ -37,6 +42,12 @@ export default function Header({ user, onLogout }: HeaderProps) {
                     Vendors
                   </Link>
                   <Link
+                    to="/admin/tenants"
+                    className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
+                  >
+                    Tenants
+                  </Link>
+                  <Link
                     to="/admin/buildings"
                     className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
                   >
@@ -47,6 +58,12 @@ export default function Header({ user, onLogout }: HeaderProps) {
                     className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
                   >
                     Audit
+                  </Link>
+                  <Link
+                    to="/admin/team"
+                    className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
+                  >
+                    Team
                   </Link>
                 </>
               )}

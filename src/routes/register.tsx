@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -9,7 +9,7 @@ import {
   Card,
   ErrorBanner,
   PageTitle,
-  PasswordStrength
+  PasswordStrength,
 } from "../components";
 import { Role, SessionUser, useRegister } from "../state/session";
 import { useToast } from "../ui/toast/ToastProvider";
@@ -41,14 +41,24 @@ const registerSchema = z
       .string()
       .min(1, "El email es obligatorio")
       .email("Formato inválido"),
-    name: z.string().optional(),
-    vendorId: z.string().optional(),
-    role: z.enum(["ADMIN", "VENDOR", "GUARD"]),
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    phone: z.string().optional(),
+    role: z.enum([
+      "ACCOUNT_OWNER",
+      "PORTFOLIO_MANAGER",
+      "PROPERTY_MANAGER",
+      "BUILDING_OWNER",
+      "TENANT",
+      "VENDOR",
+      "GUARD",
+    ]),
     password: z.string().min(6, "Mínimo 6 caracteres"),
     confirmPassword: z.string().min(1, "Confirma tu contraseña"),
     acceptTos: z.boolean().refine((val) => val === true, {
       message: "Debes aceptar los términos y condiciones",
     }),
+    invited: z.boolean().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Las contraseñas no coinciden",
@@ -62,15 +72,30 @@ export default function RegisterPage() {
   const cachedMe = qc.getQueryData<SessionUser | null>(["me"]);
   const nav = useNavigate();
   const { show } = useToast();
+  const search = useSearch({ from: "/register" }) as {
+    email?: string;
+    role?: string;
+    invited?: string;
+    firstName?: string;
+    lastName?: string;
+  };
+  const isInvited = search?.invited === "1";
 
   useEffect(() => {
     if (cachedMe) {
-      const redirectPath =
-        cachedMe.role === "ADMIN"
-          ? "/admin"
-          : cachedMe.role === "VENDOR"
-          ? "/vendor"
-          : "/guard/check";
+      const role = cachedMe.role;
+      const isManagement =
+        role === "ACCOUNT_OWNER" ||
+        role === "PORTFOLIO_MANAGER" ||
+        role === "PROPERTY_MANAGER";
+
+      const redirectPath = isManagement
+        ? "/admin"
+        : role === "GUARD"
+        ? "/guard/check"
+        : role === "VENDOR"
+        ? "/vendor"
+        : "/profile";
       nav({ to: redirectPath, replace: true });
     }
   }, [cachedMe, nav]);
@@ -84,13 +109,15 @@ export default function RegisterPage() {
     resolver: zodResolver(registerSchema),
     mode: "onTouched",
     defaultValues: {
-      email: "",
-      name: "",
-      vendorId: "",
-      role: "VENDOR",
+      email: search.email || "",
+      firstName: search.firstName || "",
+      lastName: search.lastName || "",
+      phone: "",
+      role: (search.role as Role) || "ACCOUNT_OWNER",
       password: "",
       confirmPassword: "",
       acceptTos: false,
+      invited: isInvited,
     },
   });
 
@@ -104,8 +131,10 @@ export default function RegisterPage() {
       email: data.email,
       password: data.password,
       role: data.role as Role,
-      name: data.name || undefined,
-      vendorId: data.vendorId || undefined,
+      firstName: data.firstName || undefined,
+      lastName: data.lastName || undefined,
+      phone: data.phone || undefined,
+      invited: isInvited,
     });
 
     show({
@@ -114,12 +143,17 @@ export default function RegisterPage() {
       description: `Welcome ${data.email} to ProofHolder!`,
     });
 
-    const redirectPath =
-      role === "ADMIN"
-        ? "/admin"
-        : role === "VENDOR"
-        ? "/vendor"
-        : "/guard/check";
+    const isManagement =
+      role === "ACCOUNT_OWNER" ||
+      role === "PORTFOLIO_MANAGER" ||
+      role === "PROPERTY_MANAGER";
+    const redirectPath = isManagement
+      ? "/admin"
+      : role === "GUARD"
+      ? "/guard/check"
+      : role === "VENDOR"
+      ? "/vendor"
+      : "/profile";
 
     nav({ to: redirectPath, replace: true });
   };
@@ -162,11 +196,11 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
-              Nombre (opcional)
+              Nombre
             </label>
             <input
               type="text"
-              {...register("name")}
+              {...register("firstName")}
               className="field"
               autoComplete="name"
             />
@@ -174,24 +208,49 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
+              Apellido
+            </label>
+            <input
+              type="text"
+              {...register("lastName")}
+              className="field"
+              autoComplete="family-name"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
               Rol *
             </label>
-            <select {...register("role")} className="field text-black">
-              <option value="ADMIN">ADMIN</option>
+            <select
+              {...register("role")}
+              className="field text-black"
+              disabled={isInvited}
+            >
+              <option value="ACCOUNT_OWNER">ACCOUNT_OWNER</option>
+              <option value="PORTFOLIO_MANAGER">PORTFOLIO_MANAGER</option>
+              <option value="PROPERTY_MANAGER">PROPERTY_MANAGER</option>
+              <option value="BUILDING_OWNER">BUILDING_OWNER</option>
+              <option value="TENANT">TENANT</option>
               <option value="VENDOR">VENDOR</option>
               <option value="GUARD">GUARD</option>
             </select>
+            {isInvited && (
+              <p className="mt-1 text-xs text-neutral-500">
+                This role was pre-selected from your invitation.
+              </p>
+            )}
           </div>
 
           <div className="sm:col-span-2">
             <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-200 mb-1">
-              Vendor ID (opcional)
+              Teléfono (opcional)
             </label>
             <input
-              type="text"
-              {...register("vendorId")}
+              type="tel"
+              {...register("phone")}
               className="field"
-              autoComplete="off"
+              autoComplete="tel"
             />
           </div>
 
