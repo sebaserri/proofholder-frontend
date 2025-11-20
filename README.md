@@ -125,3 +125,16 @@ Usuario en COI Approval Page
     • Alta productividad
     • Re-login solo cada 30+ días
 
+## Roles:
+
+| Action | ACCOUNT_OWNER | PORTFOLIO_MANAGER | PROPERTY_MANAGER | BUILDING_OWNER | TENANT | VENDOR | GUARD |
+|--------|----|----|-------|----|----|----|----|
+| View Billing | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Manage Subscription | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Invite Portfolio Mgr | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Invite Property Mgr | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Create Buildings | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Approve Vendors | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Manage COIs | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Upload Own COI | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| Check Access | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ |
