@@ -184,7 +184,7 @@ export default function VendorsManagement() {
             try {
               await createVendor({
                 method: "POST",
-                body: JSON.stringify(data),
+                body: data,
               });
               await fetchVendors();
               setIsCreateModalOpen(false);
@@ -207,7 +207,7 @@ export default function VendorsManagement() {
               await updateVendorPhone({
                 endpoint: `/vendors/${editingVendor.id}/phone`,
                 method: "POST",
-                body: JSON.stringify({ contactPhone }),
+                body: { contactPhone },
               });
               await fetchVendors();
               setEditingVendorId(null);
@@ -250,6 +250,7 @@ export default function VendorsManagement() {
 type VendorFormData = {
   legalName: string;
   contactEmail: string;
+  contactPhone: string;
 };
 
 // Vendor Modal Component (Create only)
@@ -330,6 +331,28 @@ function VendorModal({
             )}
           </div>
 
+            <div>
+                <label className="block text-sm font-medium mb-2">
+                    Contact Phone
+                </label>
+                <input
+                    {...register("contactPhone", {
+                        pattern: {
+                            value: /^[\+]?[0-9\s\-\(\)]{10,}$/,
+                            message: "Invalid phone number format",
+                        },
+                    })}
+                    type="tel"
+                    className="field"
+                    placeholder="e.g., +1 (555) 123-4567"
+                />
+                {errors.contactPhone && (
+                    <p className="text-sm text-red-600 mt-1">
+                        {errors.contactPhone.message}
+                    </p>
+                )}
+            </div>
+
           {/* Actions */}
           <div className="flex gap-3 pt-4">
             <button
@@ -384,7 +407,7 @@ function InviteVendorModal({
     try {
       await inviteVendor({
         method: "POST",
-        body: JSON.stringify(data),
+        body: data,
       });
       reset();
       onSuccess();
@@ -510,7 +533,7 @@ function BulkApproveModal({
     try {
       await bulkApprove({
         method: "POST",
-        body: JSON.stringify(data),
+        body: data,
       });
       onSuccess();
     } catch {
@@ -646,24 +669,28 @@ function PhoneModal({
           </div>
 
           {/* Contact Phone */}
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Contact Phone *
-            </label>
-            <input
-              {...register("contactPhone", {
-                required: "Phone is required",
-              })}
-              type="tel"
-              className="field"
-              placeholder="e.g., +1 (555) 123-4567"
-            />
-            {errors.contactPhone && (
-              <p className="text-sm text-red-600 mt-1">
-                {errors.contactPhone.message}
-              </p>
-            )}
-          </div>
+            <div>
+                <label className="block text-sm font-medium mb-2">
+                    Contact Phone *
+                </label>
+                <input
+                    {...register("contactPhone", {
+                        required: "Phone number is required",
+                        pattern: {
+                            value: /^[\+]?[0-9\s\-\(\)]{10,}$/,
+                            message: "Invalid phone number format",
+                        },
+                    })}
+                    type="tel"
+                    className="field"
+                    placeholder="e.g., +1 (555) 123-4567"
+                />
+                {errors.contactPhone && (
+                    <p className="text-sm text-red-600 mt-1">
+                        {errors.contactPhone.message}
+                    </p>
+                )}
+            </div>
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">
