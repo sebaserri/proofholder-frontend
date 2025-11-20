@@ -132,7 +132,7 @@ export default function BuildingsManagement() {
             try {
               await createBuilding({
                 method: "POST",
-                body: JSON.stringify(data),
+                body: data,
               });
               await fetchBuildings();
               setIsCreateModalOpen(false);
@@ -156,7 +156,7 @@ export default function BuildingsManagement() {
               await updateBuilding({
                 endpoint: `/buildings/${editingBuilding.id}`,
                 method: "PATCH",
-                body: JSON.stringify(data),
+                body: data,
               });
               await fetchBuildings();
               setEditingBuilding(null);

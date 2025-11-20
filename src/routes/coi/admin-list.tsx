@@ -298,10 +298,10 @@ function COIRow({ coi }: { coi: COIListItem }) {
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-              {coi.vendor.legalName}
+              {coi.vendor?.legalName}
             </div>
             <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-              {coi.vendorId.slice(0, 8)}...
+              {coi.vendorId?.slice(0, 8)}...
             </div>
           </div>
         </div>
