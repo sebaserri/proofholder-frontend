@@ -1,5 +1,7 @@
 // src/types/vendor.types.ts
 
+import { Building } from "./building.types";
+
 // Basic vendor info (used across app)
 export interface Vendor {
   id: string;
@@ -39,9 +41,7 @@ export interface VendorListItem {
 export interface VendorAuthorization {
   id: string;
   vendorId: string;
-  buildingId: string;
-  buildingName: string;
-  buildingAddress: string;
+  building: Building;
   status: "PENDING" | "APPROVED" | "REJECTED";
   approvedBy?: string;
   approvedAt?: string;

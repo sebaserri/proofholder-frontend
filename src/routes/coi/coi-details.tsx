@@ -121,11 +121,36 @@ export default function COIDetails() {
 
   const coverage = useMemo(
     () => [
-      { label: "General Liability", value: coi?.generalLiabLimit },
-      { label: "Auto Liability", value: coi?.autoLiabLimit },
-      { label: "Umbrella", value: coi?.umbrellaLimit },
+      {
+        label: "GL - Each Occurrence",
+        value: coi?.glOccurrence ?? coi?.generalLiabLimit ?? null,
+      },
+      {
+        label: "GL - Aggregate",
+        value: coi?.glAggregate ?? null,
+      },
+      {
+        label: "Auto Liability",
+        value: coi?.autoCombined ?? coi?.autoLiabLimit ?? null,
+      },
+      {
+        label: "Umbrella",
+        value: coi?.umbrellaLimit ?? null,
+      },
+      {
+        label: "Workers Comp - Policy Limit",
+        value: coi?.wcPolicyLimit ?? null,
+      },
     ],
-    [coi?.autoLiabLimit, coi?.generalLiabLimit, coi?.umbrellaLimit]
+    [
+      coi?.glOccurrence,
+      coi?.generalLiabLimit,
+      coi?.glAggregate,
+      coi?.autoCombined,
+      coi?.autoLiabLimit,
+      coi?.umbrellaLimit,
+      coi?.wcPolicyLimit,
+    ]
   );
 
   if (!id) {
@@ -207,8 +232,21 @@ export default function COIDetails() {
                   icon={<Building className="h-4 w-4 text-brand" />}
                   label="Building"
                   value={coi.building.name}
-                  description={coi.building.address}
+                  description={[
+                    coi.building.address,
+                    coi.building.city,
+                    coi.building.state,
+                    coi.building.zipCode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
                 />
+                {coi.insuranceCompany && (
+                  <DetailItem
+                    label="Insurance Company"
+                    value={coi.insuranceCompany}
+                  />
+                )}
                 {coi.insuredName && (
                   <DetailItem label="Insured" value={coi.insuredName} />
                 )}
@@ -269,7 +307,11 @@ export default function COIDetails() {
               />
               <CheckboxField
                 label="Waiver of Subrogation"
-                checked={coi.waiverOfSubrogation}
+                checked={coi.waiverOfSubrogation || coi.waiverSubrogation}
+              />
+              <CheckboxField
+                label="Primary & Non-Contributory"
+                checked={coi.primaryNonContrib}
               />
             </div>
           </div>
@@ -296,35 +338,48 @@ export default function COIDetails() {
                 <p className="text-xs text-red-500 mb-2">{downloadError}</p>
               )}
               <div className="space-y-2">
-                {coi.files.map((file) => (
-                  <a
-                    key={file.id}
-                    href={file.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 hover:bg-neutral-50 dark:hover:bg-neutral-900"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-4 w-4 text-neutral-500" />
-                      <div>
-                        <p className="text-sm font-medium">
-                          {file.kind || "Attachment"}
-                        </p>
-                        <p className="text-xs text-neutral-500">PDF</p>
+                {coi.files.map((file) => {
+                  const href = file.fileUrl || file.url;
+                  const label = file.fileName || file.kind || "Attachment";
+                  const typeLabel = file.mimeType
+                    ? file.mimeType.split("/").pop()?.toUpperCase() ||
+                      file.mimeType
+                    : "File";
+                  const sizeLabel =
+                    typeof file.fileSize === "number"
+                      ? ` • ${(file.fileSize / 1024).toFixed(1)} KB`
+                      : "";
+                  return (
+                    <a
+                      key={file.id}
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-4 w-4 text-neutral-500" />
+                        <div>
+                          <p className="text-sm font-medium">{label}</p>
+                          <p className="text-xs text-neutral-500">
+                            {typeLabel}
+                            {sizeLabel}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <Download className="h-4 w-4 text-neutral-400" />
-                  </a>
-                ))}
+                      <Download className="h-4 w-4 text-neutral-400" />
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {coi.notes && (
+          {(coi.reviewNotes || coi.notes) && (
             <div className="card p-6">
               <h3 className="text-xl font-semibold mb-2">Review Notes</h3>
               <p className="text-sm text-neutral-600 dark:text-neutral-400 whitespace-pre-line">
-                {coi.notes}
+                {coi.reviewNotes || coi.notes}
               </p>
             </div>
           )}
@@ -377,6 +432,12 @@ export default function COIDetails() {
                 label="Updated"
                 value={new Date(coi.updatedAt).toLocaleString()}
               />
+              {coi.reviewedAt && (
+                <DetailRow
+                  label="Reviewed"
+                  value={new Date(coi.reviewedAt).toLocaleString()}
+                />
+              )}
             </dl>
           </div>
         </div>

@@ -328,13 +328,13 @@ export default function TenantDetailPage() {
                           {coi.files.map((file) => (
                             <a
                               key={file.id}
-                              href={file.url}
+                              href={file.fileUrl || file.url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800"
                             >
                               <FileText className="h-3 w-3" />
-                              <span>{file.kind || "PDF"}</span>
+                              <span>{file.fileName || file.kind || "File"}</span>
                             </a>
                           ))}
                         </div>

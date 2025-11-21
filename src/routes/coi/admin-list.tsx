@@ -66,11 +66,14 @@ export default function AdminCoiListPage() {
 
   // Filter COIs based on search and status
   const filteredCois = coiList.filter((coi: COIListItem) => {
+    const query = searchQuery.toLowerCase();
     const matchesSearch =
       !searchQuery ||
-      coi.vendor.legalName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      coi.building.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (coi.insuredName || "").toLowerCase().includes(searchQuery.toLowerCase());
+      coi.vendor.legalName.toLowerCase().includes(query) ||
+      coi.building.name.toLowerCase().includes(query) ||
+      (coi.insuredName || "").toLowerCase().includes(query) ||
+      (coi.insuranceCompany || "").toLowerCase().includes(query) ||
+      (coi.policyNumber || "").toLowerCase().includes(query);
 
     const matchesStatus = !statusFilter || coi.status === statusFilter;
 
@@ -288,6 +291,16 @@ function COIRow({ coi }: { coi: COIListItem }) {
   const isExpiringSoon =
     daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30;
 
+  const generalLimit =
+    coi.generalLiabLimit ??
+    coi.glOccurrence ??
+    coi.glAggregate ??
+    undefined;
+  const autoLimit =
+    coi.autoLiabLimit ??
+    coi.autoCombined ??
+    undefined;
+
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors group">
       {/* Vendor */}
@@ -324,23 +337,23 @@ function COIRow({ coi }: { coi: COIListItem }) {
       {/* Coverage */}
       <td className="px-6 py-4">
         <div className="space-y-1.5">
-          {coi.generalLiabLimit && (
+          {generalLimit != null && (
             <div className="flex items-center gap-2">
               <Badge variant="default" size="sm">
                 GL
               </Badge>
               <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                ${(coi.generalLiabLimit / 1000000).toFixed(1)}M
+                ${(generalLimit / 1000000).toFixed(1)}M
               </span>
             </div>
           )}
-          {coi.autoLiabLimit && (
+          {autoLimit != null && (
             <div className="flex items-center gap-2">
               <Badge variant="default" size="sm">
                 Auto
               </Badge>
               <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                ${(coi.autoLiabLimit / 1000000).toFixed(1)}M
+                ${(autoLimit / 1000000).toFixed(1)}M
               </span>
             </div>
           )}

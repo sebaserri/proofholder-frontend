@@ -14,10 +14,7 @@ import { useForm } from "react-hook-form";
 import { LoadingOverlay } from "../../components";
 import { useApi } from "../../hooks/useApi";
 import { COIListItem, COIStatus } from "../../types";
-import {
-  Vendor,
-  VendorAuthorization,
-} from "../../types/vendor.types";
+import { Vendor, VendorAuthorization } from "../../types/vendor.types";
 
 export default function VendorPortal() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -36,9 +33,12 @@ export default function VendorPortal() {
     data: authorizations,
     loading: loadingAuth,
     execute: fetchAuthorizations,
-  } = useApi<VendorAuthorization[]>("/vendors/me/authorizations", {
-    showErrorToast: true,
-  });
+  } = useApi<VendorAuthorization[]>(
+    `/vendors/me/authorizations/${profile?.id}`,
+    {
+      showErrorToast: true,
+    }
+  );
 
   // Fetch vendor's COIs - endpoint: GET /vendors/me/cois
   const {
@@ -52,9 +52,13 @@ export default function VendorPortal() {
 
   useEffect(() => {
     fetchProfile();
-    fetchAuthorizations();
     fetchCois();
-  }, [fetchProfile, fetchAuthorizations, fetchCois]);
+  }, [fetchProfile, fetchCois]);
+
+  useEffect(() => {
+    if (!profile?.id) return;
+    fetchAuthorizations();
+  }, [profile?.id, fetchAuthorizations]);
 
   if (loadingProfile || loadingAuth || isLoading) return <LoadingOverlay />;
 
@@ -161,15 +165,13 @@ export default function VendorPortal() {
                 className="flex items-center justify-between border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-2"
               >
                 <div>
-                  <div className="font-medium">{auth.buildingName}</div>
+                  <div className="font-medium">{auth?.building?.name}</div>
                   <div className="text-xs text-neutral-500">
-                    {auth.buildingAddress}
+                    {auth.building.address}
                   </div>
                 </div>
                 <StatusBadge
-                  status={
-                    auth.status as "PENDING" | "APPROVED" | "REJECTED"
-                  }
+                  status={auth.status as "PENDING" | "APPROVED" | "REJECTED"}
                 />
               </li>
             ))}
@@ -248,6 +250,8 @@ function Section({
 
 // COI Card Component
 function COICard({ coi }: { coi: COIListItem }) {
+  const [showDetails, setShowDetails] = useState(false);
+
   const isExpiringSoon =
     coi.expirationDate &&
     new Date(coi.expirationDate) <
@@ -303,9 +307,161 @@ function COICard({ coi }: { coi: COIListItem }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button className="btn btn-sm btn-ghost">View Details</button>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => setShowDetails((prev) => !prev)}
+          >
+            {showDetails ? "Hide Details" : "View Details"}
+          </button>
         </div>
       </div>
+
+      {showDetails && (
+        <div className="mt-4 grid gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+          {(coi.insuranceCompany || coi.insurer) && (
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Insurance Company:
+              </span>
+              <span className="font-medium text-neutral-900 dark:text-neutral-100">
+                {coi.insuranceCompany || coi.insurer}
+              </span>
+            </div>
+          )}
+          {coi.policyNumber && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Policy Number:
+              </span>
+              <span className="font-medium text-neutral-900 dark:text-neutral-100">
+                {" "}
+                {coi.policyNumber}
+              </span>
+            </div>
+          )}
+          {coi.effectiveDate && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Effective:
+              </span>
+              <span
+                className={`font-medium ${
+                  isExpired
+                    ? "text-red-600"
+                    : isExpiringSoon
+                    ? "text-amber-600"
+                    : "text-neutral-900 dark:text-neutral-100"
+                }`}
+              >
+                {format(new Date(coi.effectiveDate), "MMMM dd, yyyy")}
+              </span>
+            </div>
+          )}
+          {coi.expirationDate && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Expires:
+              </span>
+              <span
+                className={`font-medium ${
+                  isExpired
+                    ? "text-red-600"
+                    : isExpiringSoon
+                    ? "text-amber-600"
+                    : "text-neutral-900 dark:text-neutral-100"
+                }`}
+              >
+                {format(new Date(coi.expirationDate), "MMMM dd, yyyy")}
+              </span>
+            </div>
+          )}
+          {coi.generalLiabLimit != null && (
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                General Liability:
+              </span>
+              <span> ${coi.generalLiabLimit.toLocaleString()}</span>
+            </div>
+          )}
+          {coi.autoLiabLimit != null && (
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Auto Liability:
+              </span>
+              <span
+                className={`font-medium text-neutral-900 dark:text-neutral-100`}
+              >
+                ${coi.autoLiabLimit.toLocaleString()}
+              </span>
+            </div>
+          )}
+          {coi.workersComp !== undefined && (
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Workers Comp:
+              </span>
+              <span
+                className={`font-medium text-neutral-900 dark:text-neutral-100`}
+              >
+                {" "}
+                {coi.workersComp ? "Yes" : "No"}
+              </span>
+            </div>
+          )}
+          {(coi.additionalInsured ||
+            coi.waiverSubrogation ||
+            coi.primaryNonContrib) && (
+            <div className="flex flex-wrap gap-2">
+              {coi.additionalInsured !== undefined && (
+                <span className="inline-flex items-center rounded-full border border-neutral-300 dark:border-neutral-700 px-2 py-0.5 text-xs">
+                  Additional Insured: {coi.additionalInsured ? "Yes" : "No"}
+                </span>
+              )}
+              {coi.waiverSubrogation !== undefined && (
+                <span className="inline-flex items-center rounded-full border border-neutral-300 dark:border-neutral-700 px-2 py-0.5 text-xs">
+                  Waiver: {coi.waiverSubrogation ? "Yes" : "No"}
+                </span>
+              )}
+              {coi.primaryNonContrib !== undefined && (
+                <span className="inline-flex items-center rounded-full border border-neutral-300 dark:border-neutral-700 px-2 py-0.5 text-xs">
+                  Primary/Non-Contrib: {coi.primaryNonContrib ? "Yes" : "No"}
+                </span>
+              )}
+            </div>
+          )}
+          {coi.createdAt && (
+            <div className="flex items-center gap-2">
+              <span className="text-neutral-600 dark:text-neutral-400">
+                Submitted:
+              </span>
+              <span
+                className={`font-medium text-neutral-900 dark:text-neutral-100`}
+              >
+                {format(new Date(coi.createdAt), "MMM dd, yyyy, HH:mm")}
+              </span>
+            </div>
+          )}
+          {coi.status === "REJECTED" && coi.reviewNotes && (
+            <div className="mt-2 rounded-md border border-red-200/70 bg-red-50/60 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+              <span className="font-semibold">Review notes: </span>
+              <span>{coi.reviewNotes}</span>
+            </div>
+          )}
+          {coi.files && coi.files.length > 0 && (
+            <div className="mt-2 flex items-center gap-2 text-xs">
+              <FileText className="h-4 w-4" />
+              <span>
+                {coi.files[0].fileName || "COI File"}{" "}
+                {coi.files.length > 1
+                  ? `(+${coi.files.length - 1} more file${
+                      coi.files.length - 1 > 1 ? "s" : ""
+                    })`
+                  : ""}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -343,10 +499,7 @@ function StatusBadge({ status }: { status: COIStatus }) {
 
 // Upload COI modal - uses POST /vendors/upload-coi
 function UploadCoiModal({ onClose }: { onClose: () => void }) {
-  const {
-    execute: uploadCoi,
-    loading,
-  } = useApi("/vendors/upload-coi", {
+  const { execute: uploadCoi, loading } = useApi("/vendors/upload-coi", {
     showSuccessToast: true,
     successMessage: "COI uploaded successfully",
     showErrorToast: true,
@@ -367,7 +520,10 @@ function UploadCoiModal({ onClose }: { onClose: () => void }) {
     fetchBuildings();
   }, [fetchBuildings]);
 
-  const onSubmit = async (data: { buildingId: string; expirationDate: string }) => {
+  const onSubmit = async (data: {
+    buildingId: string;
+    expirationDate: string;
+  }) => {
     const fileInput = document.getElementById(
       "coi-file-input"
     ) as HTMLInputElement | null;
@@ -405,9 +561,7 @@ function UploadCoiModal({ onClose }: { onClose: () => void }) {
         </div>
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Building *
-            </label>
+            <label className="block text-sm font-medium mb-2">Building *</label>
             <select
               {...register("buildingId", { required: true })}
               className="field"
@@ -431,9 +585,7 @@ function UploadCoiModal({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">
-              COI PDF *
-            </label>
+            <label className="block text-sm font-medium mb-2">COI PDF *</label>
             <input
               id="coi-file-input"
               type="file"

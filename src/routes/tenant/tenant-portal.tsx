@@ -148,6 +148,17 @@ function COICard({ coi }: { coi: COIListItem }) {
             {coi.status}
           </span>
         </div>
+        {(coi.insuranceCompany || coi.policyNumber) && (
+          <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+            {coi.insuranceCompany && <span>{coi.insuranceCompany}</span>}
+            {coi.policyNumber && (
+              <span>
+                {coi.insuranceCompany && " · "}
+                Policy #{coi.policyNumber}
+              </span>
+            )}
+          </div>
+        )}
         {coi.expirationDate && (
           <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
             Expires on{" "}

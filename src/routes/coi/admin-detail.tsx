@@ -222,13 +222,41 @@ export default function AdminCoiDetailPage() {
                   icon={<Building2 className="h-5 w-5" />}
                   label="Building"
                   value={typedCoi.building.name}
-                  sublabel={typedCoi.building.address}
+                  sublabel={[
+                    typedCoi.building.address,
+                    typedCoi.building.city,
+                    typedCoi.building.state,
+                    typedCoi.building.zipCode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
                 />
                 {typedCoi.insuredName && (
                   <InfoField
                     icon={<ShieldCheck className="h-5 w-5" />}
                     label="Insured Name"
                     value={typedCoi.insuredName}
+                  />
+                )}
+                {typedCoi.insuranceCompany && (
+                  <InfoField
+                    icon={<ShieldCheck className="h-5 w-5" />}
+                    label="Insurance Company"
+                    value={typedCoi.insuranceCompany}
+                  />
+                )}
+                {typedCoi.policyNumber && (
+                  <InfoField
+                    icon={<FileText className="h-5 w-5" />}
+                    label="Policy Number"
+                    value={typedCoi.policyNumber}
+                  />
+                )}
+                {typedCoi.insurer && (
+                  <InfoField
+                    icon={<FileText className="h-5 w-5" />}
+                    label="Insurer"
+                    value={typedCoi.insurer}
                   />
                 )}
                 {typedCoi.producer && (
@@ -292,32 +320,56 @@ export default function AdminCoiDetailPage() {
           {/* Coverage Limits */}
           {(typedCoi.generalLiabLimit ||
             typedCoi.autoLiabLimit ||
-            typedCoi.umbrellaLimit) && (
+            typedCoi.umbrellaLimit ||
+            typedCoi.glOccurrence ||
+            typedCoi.glAggregate ||
+            typedCoi.autoCombined ||
+            typedCoi.wcPolicyLimit) && (
             <Card variant="elevated">
               <Card.Header>
                 <h2 className="text-xl font-bold">Coverage Limits</h2>
               </Card.Header>
               <Card.Body>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {typedCoi.generalLiabLimit && (
+                  {(typedCoi.glOccurrence || typedCoi.generalLiabLimit) && (
                     <InfoField
                       icon={<DollarSign className="h-5 w-5" />}
-                      label="General Liability"
-                      value={`$${typedCoi.generalLiabLimit.toLocaleString()}`}
+                      label="General Liability - Each Occurrence"
+                      value={`$${(
+                        typedCoi.glOccurrence ?? typedCoi.generalLiabLimit!
+                      ).toLocaleString()}`}
                     />
                   )}
-                  {typedCoi.autoLiabLimit && (
+                  {typedCoi.glAggregate && (
+                    <InfoField
+                      icon={<DollarSign className="h-5 w-5" />}
+                      label="General Liability - Aggregate"
+                      value={`$${typedCoi.glAggregate.toLocaleString()}`}
+                    />
+                  )}
+                  {(typedCoi.autoCombined || typedCoi.autoLiabLimit) && (
                     <InfoField
                       icon={<DollarSign className="h-5 w-5" />}
                       label="Auto Liability"
-                      value={`$${typedCoi.autoLiabLimit.toLocaleString()}`}
+                      value={`$${(
+                        typedCoi.autoCombined ?? typedCoi.autoLiabLimit!
+                      ).toLocaleString()}`}
                     />
                   )}
-                  {typedCoi.umbrellaLimit && (
+                  {(typedCoi.umbrellaLimit || typedCoi.umbrellaLimitLegacy) && (
                     <InfoField
                       icon={<DollarSign className="h-5 w-5" />}
                       label="Umbrella"
-                      value={`$${typedCoi.umbrellaLimit.toLocaleString()}`}
+                      value={`$${(
+                        typedCoi.umbrellaLimit ?? typedCoi.umbrellaLimitLegacy!
+                      ).toLocaleString()}`}
+                    />
+                  )}
+                  {typedCoi.wcPolicyLimit && (
+                    <InfoField
+                      icon={<DollarSign className="h-5 w-5" />}
+                      label="Workers Comp - Policy Limit"
+                      value={`$${typedCoi.wcPolicyLimit.toLocaleString()}`}
                     />
                   )}
                 </div>
@@ -342,7 +394,13 @@ export default function AdminCoiDetailPage() {
                 />
                 <FeatureBadge
                   label="Waiver of Subrogation"
-                  active={typedCoi.waiverOfSubrogation}
+                  active={
+                    typedCoi.waiverOfSubrogation || typedCoi.waiverSubrogation
+                  }
+                />
+                <FeatureBadge
+                  label="Primary & Non-Contributory"
+                  active={typedCoi.primaryNonContrib}
                 />
               </div>
             </Card.Body>
@@ -378,7 +436,7 @@ export default function AdminCoiDetailPage() {
                   {typedCoi.files.map((file) => (
                     <a
                       key={file.id}
-                      href={file.url}
+                      href={file.fileUrl || file.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-between p-4 rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all group"
@@ -389,10 +447,12 @@ export default function AdminCoiDetailPage() {
                         </div>
                         <div>
                           <p className="font-semibold text-gray-900 dark:text-gray-100">
-                            {file.kind}
+                            {file.fileName || file.kind || "Attachment"}
                           </p>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            PDF Document
+                            {file.mimeType
+                              ? file.mimeType
+                              : "File"}
                           </p>
                         </div>
                       </div>
@@ -405,14 +465,14 @@ export default function AdminCoiDetailPage() {
           </Card>
 
           {/* Review Notes */}
-          {typedCoi.notes && (
+          {(typedCoi.reviewNotes || typedCoi.notes) && (
             <Card variant="elevated" tone="info">
               <Card.Header>
                 <h2 className="text-xl font-bold">Review Notes</h2>
               </Card.Header>
               <Card.Body>
                 <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
-                  {typedCoi.notes}
+                  {typedCoi.reviewNotes || typedCoi.notes}
                 </p>
               </Card.Body>
             </Card>
@@ -502,6 +562,17 @@ export default function AdminCoiDetailPage() {
                   timeStyle: "short",
                 })}
               />
+              {typedCoi.reviewedAt && (
+                <MetadataField
+                  label="Reviewed"
+                  value={new Date(
+                    typedCoi.reviewedAt
+                  ).toLocaleString("en-US", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                />
+              )}
               <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                 <MetadataField label="COI ID" value={typedCoi.id} mono />
               </div>

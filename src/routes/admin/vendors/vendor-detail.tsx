@@ -42,7 +42,7 @@ export default function VendorDetailPage() {
     data: authorizations,
     loading: loadingAuth,
     execute: fetchAuthorizations,
-  } = useApi<VendorAuthorization[]>(`/vendors/me/authorizations`, {
+  } = useApi<VendorAuthorization[]>(`/vendors/me/authorizations/${id}`, {
     showErrorToast: true,
   });
 
@@ -137,7 +137,7 @@ export default function VendorDetailPage() {
   const canDeleteVendor = me?.role === "ACCOUNT_OWNER";
 
   const handleApproveAuth = async (auth: VendorAuthorization) => {
-    const payload: ApproveVendorDto = { buildingId: auth.buildingId };
+    const payload: ApproveVendorDto = { buildingId: auth.building.id };
     try {
       await approveVendor({
         method: "POST",
@@ -154,7 +154,7 @@ export default function VendorDetailPage() {
     const reason =
       window.prompt("Enter rejection reason (optional):") || undefined;
     const payload: RejectVendorDto = {
-      buildingId: auth.buildingId,
+      buildingId: auth.building.id,
       notes: reason,
     };
     try {
@@ -309,10 +309,10 @@ export default function VendorDetailPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <Building2 className="h-4 w-4 text-brand" />
-                        <span className="font-medium">{auth.buildingName}</span>
+                        <span className="font-medium">{auth.building.name}</span>
                       </div>
                       <p className="text-xs text-neutral-500">
-                        {auth.buildingAddress}
+                        {auth.building.address}
                       </p>
                       {auth.notes && (
                         <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-400">
@@ -365,14 +365,32 @@ export default function VendorDetailPage() {
                     key={coi.id}
                     className="flex items-center justify-between border border-neutral-200 dark:border-neutral-800 rounded-lg px-3 py-2"
                   >
-                    <div>
+                    <div className="space-y-1">
                       <div className="font-medium">
                         {coi.building.name} – {coi.status}
                       </div>
+                      {(coi.insuranceCompany || coi.policyNumber) && (
+                        <div className="text-xs text-neutral-500">
+                          {coi.insuranceCompany && (
+                            <span>{coi.insuranceCompany}</span>
+                          )}
+                          {coi.policyNumber && (
+                            <span>
+                              {coi.insuranceCompany && " · "}
+                              Policy #{coi.policyNumber}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {coi.expirationDate && (
                         <div className="text-xs text-neutral-500">
                           Expires on{" "}
                           {new Date(coi.expirationDate).toLocaleDateString()}
+                        </div>
+                      )}
+                      {coi.status === "REJECTED" && coi.reviewNotes && (
+                        <div className="text-xs text-red-600 dark:text-red-400">
+                          {coi.reviewNotes}
                         </div>
                       )}
                     </div>
